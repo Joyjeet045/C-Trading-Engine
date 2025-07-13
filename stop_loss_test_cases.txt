@@ -1,0 +1,249 @@
+# Stop Loss Order Test Cases
+# Format: ORDER <symbol> <type> <side> <price> <quantity>
+# Client IDs: CLIENT1, CLIENT2, CLIENT3
+
+## Test Case 1: Basic Stop Loss Trigger - Sell Stop Loss
+# Client1 places a sell stop loss order that gets triggered when price drops
+
+# Initial market setup - establish a price level
+ORDER
+AAPL
+LIMIT
+BUY
+150.00
+100
+CLIENT1
+
+ORDER
+AAPL
+LIMIT
+SELL
+150.50
+100
+CLIENT2
+
+# Execute the initial trade to set last_trade_price = 150.50
+# Now place stop loss orders
+
+# Client1 places a sell stop loss at 149.00 (will trigger when price drops below 149.00)
+ORDER
+AAPL
+STOP_LOSS
+SELL
+149.00
+50
+CLIENT1
+
+# Client2 places a buy order at 148.50 to trigger the stop loss
+ORDER
+AAPL
+LIMIT
+BUY
+148.50
+50
+CLIENT2
+
+# Expected behavior: Stop loss order should trigger immediately when CLIENT2's buy order
+# matches with CLIENT1's stop loss, executing at market price around 148.50
+
+## Test Case 2: Buy Stop Loss Trigger - Price Rises
+# Client3 places a buy stop loss order that gets triggered when price rises
+
+# Client3 places a buy stop loss at 151.00 (will trigger when price rises above 151.00)
+ORDER
+AAPL
+STOP_LOSS
+BUY
+151.00
+75
+CLIENT3
+
+# Client2 places a sell order at 151.50 to trigger the stop loss
+ORDER
+AAPL
+LIMIT
+SELL
+151.50
+75
+CLIENT2
+
+# Expected behavior: Stop loss order should trigger immediately when CLIENT2's sell order
+# matches with CLIENT3's stop loss, executing at market price around 151.50
+
+## Test Case 3: Multiple Stop Loss Orders - Cascade Effect
+# Multiple clients with stop loss orders that trigger in sequence
+
+# Client1 places another sell stop loss at 147.00
+ORDER
+AAPL
+STOP_LOSS
+SELL
+147.00
+30
+CLIENT1
+
+# Client2 places a buy stop loss at 152.00
+ORDER
+AAPL
+STOP_LOSS
+BUY
+152.00
+40
+CLIENT2
+
+# Client3 places a sell stop loss at 146.50
+ORDER
+AAPL
+STOP_LOSS
+SELL
+146.50
+25
+CLIENT3
+
+# Now trigger the cascade with a large market order
+ORDER
+AAPL
+MARKET
+BUY
+0.00
+200
+CLIENT1
+
+# Expected behavior: 
+# 1. CLIENT2's buy stop loss at 152.00 should trigger first (highest price)
+# 2. CLIENT1's sell stop loss at 147.00 should trigger next
+# 3. CLIENT3's sell stop loss at 146.50 should trigger last
+# All executing as market orders against the incoming buy order
+
+## Test Case 4: Stop Loss with Insufficient Liquidity
+# Test what happens when stop loss triggers but no matching orders exist
+
+# Client1 places a sell stop loss at 145.00
+ORDER
+AAPL
+STOP_LOSS
+SELL
+145.00
+100
+CLIENT1
+
+# Trigger the stop loss with a small buy order
+ORDER
+AAPL
+LIMIT
+BUY
+144.50
+10
+CLIENT2
+
+# Expected behavior: Stop loss should trigger but only 10 shares can be filled
+# Remaining 90 shares should be rejected due to insufficient liquidity
+
+## Test Case 5: Self-Matching Prevention
+# Test that stop loss orders don't match with orders from the same client
+
+# Client1 places a buy stop loss at 153.00
+ORDER
+AAPL
+STOP_LOSS
+BUY
+153.00
+50
+CLIENT1
+
+# Client1 also places a sell order at 153.00
+ORDER
+AAPL
+LIMIT
+SELL
+153.00
+50
+CLIENT1
+
+# Expected behavior: Stop loss should NOT trigger because both orders are from CLIENT1
+# The system should prevent self-matching
+
+## Test Case 6: Partial Fill Stop Loss
+# Test stop loss with partial fills
+
+# Client1 places a sell stop loss at 148.00
+ORDER
+AAPL
+STOP_LOSS
+SELL
+148.00
+80
+CLIENT1
+
+# Client2 places a buy order that can only partially fill the stop loss
+ORDER
+AAPL
+LIMIT
+BUY
+147.50
+30
+CLIENT2
+
+# Expected behavior: Stop loss should trigger, 30 shares should be filled
+# Remaining 50 shares should be rejected due to insufficient liquidity
+# Order status should be PARTIAL_FILLED
+
+## Test Case 7: Stop Loss Cancellation
+# Test cancelling a stop loss order before it triggers
+
+# Client1 places a sell stop loss at 149.50
+ORDER
+AAPL
+STOP_LOSS
+SELL
+149.50
+60
+CLIENT1
+
+# Cancel the stop loss order (order ID would be needed in real implementation)
+# CANCEL_ORDER <order_id>
+
+# Client2 places a buy order that would have triggered the stop loss
+ORDER
+AAPL
+LIMIT
+BUY
+149.00
+60
+CLIENT2
+
+# Expected behavior: No stop loss execution should occur since the order was cancelled
+
+## Test Case 8: Market Order Triggering Stop Loss
+# Test stop loss triggered by market orders
+
+# Client1 places a buy stop loss at 154.00
+ORDER
+AAPL
+STOP_LOSS
+BUY
+154.00
+45
+CLIENT1
+
+# Client2 places a market sell order that should trigger the stop loss
+ORDER
+AAPL
+MARKET
+SELL
+0.00
+45
+CLIENT2
+
+# Expected behavior: Stop loss should trigger immediately when the market sell order
+# is processed, executing at the current best bid price
+
+## Summary of Expected Behaviors:
+# 1. Stop loss orders trigger when price crosses the stop price in the unfavorable direction
+# 2. Sell stop losses trigger when price <= stop price
+# 3. Buy stop losses trigger when price >= stop price
+# 4. Triggered stop losses become market orders
+# 5. Self-matching is prevented (same client orders don't match)
+# 6. Partial fills are handled correctly
+# 7. Insufficient liquidity results in rejected or partially filled orders
+# 8. Cancelled stop loss orders don't execute 
