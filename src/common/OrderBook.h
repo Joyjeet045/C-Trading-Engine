@@ -21,6 +21,7 @@ public:
     void cancel_order(uint64_t order_id);
     std::vector<std::shared_ptr<Order>> match_orders();
     void check_stop_loss_orders();
+    double execute_market_order(std::shared_ptr<Order> market_order, OrderSide opposite_side, double max_quantity);
     
     double get_best_bid() const;
     double get_best_ask() const;

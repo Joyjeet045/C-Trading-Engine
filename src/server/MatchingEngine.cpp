@@ -22,20 +22,20 @@ uint64_t MatchingEngine::submit_order(const std::string& symbol, OrderType type,
     auto order = std::make_shared<Order>(order_id, symbol, type, side, price, quantity, client_id);
     client_orders[client_id].push_back(order_id);
     
+    auto book = order_books[symbol];
+    
     if (type == OrderType::MARKET) {
-        auto book = order_books[symbol];
         if (side == OrderSide::BUY) {
-            order->price = book->get_best_ask();
+            execute_market_buy_order(book, order);
         } else {
-            order->price = book->get_best_bid();
+            execute_market_sell_order(book, order);
         }
+    } else {
+        book->add_order(order);
+        thread_pool.enqueue([this, symbol]() {
+            process_matching(symbol);
+        });
     }
-    
-    order_books[symbol]->add_order(order);
-    
-    thread_pool.enqueue([this, symbol]() {
-        process_matching(symbol);
-    });
     
     return order_id;
 }
@@ -86,4 +86,34 @@ bool MatchingEngine::validate_order(const std::string& symbol, OrderType type, O
     if (type == OrderType::LIMIT && price <= 0) return false;
     
     return true;
+}
+
+void MatchingEngine::execute_market_buy_order(std::shared_ptr<OrderBook> book, std::shared_ptr<Order> buy_order) {
+    double executed_quantity = book->execute_market_order(buy_order, OrderSide::SELL, buy_order->quantity);
+    
+    if (executed_quantity == buy_order->quantity) {
+        buy_order->status = OrderStatus::FILLED;
+        std::cout << "Market BUY order " << buy_order->id << " fully filled: " << executed_quantity << " shares" << std::endl;
+    } else if (executed_quantity > 0) {
+        buy_order->status = OrderStatus::PARTIAL_FILLED;
+        std::cout << "Market BUY order " << buy_order->id << " partially filled: " << executed_quantity << "/" << buy_order->quantity << " shares" << std::endl;
+    } else {
+        buy_order->status = OrderStatus::REJECTED;
+        std::cout << "Market BUY order " << buy_order->id << " rejected: no liquidity" << std::endl;
+    }
+}
+
+void MatchingEngine::execute_market_sell_order(std::shared_ptr<OrderBook> book, std::shared_ptr<Order> sell_order) {
+    double executed_quantity = book->execute_market_order(sell_order, OrderSide::BUY, sell_order->quantity);
+    
+    if (executed_quantity == sell_order->quantity) {
+        sell_order->status = OrderStatus::FILLED;
+        std::cout << "Market SELL order " << sell_order->id << " fully filled: " << executed_quantity << " shares" << std::endl;
+    } else if (executed_quantity > 0) {
+        sell_order->status = OrderStatus::PARTIAL_FILLED;
+        std::cout << "Market SELL order " << sell_order->id << " partially filled: " << executed_quantity << "/" << sell_order->quantity << " shares" << std::endl;
+    } else {
+        sell_order->status = OrderStatus::REJECTED;
+        std::cout << "Market SELL order " << sell_order->id << " rejected: no liquidity" << std::endl;
+    }
 }

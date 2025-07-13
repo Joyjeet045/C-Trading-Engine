@@ -46,20 +46,3 @@ run-server: server
 
 run-client: client
 	./$(CLIENT_TARGET)
-```
-
-## Usage Instructions
-
-1. **Build the project:**
-   ```bash
-   make all
-   ```
-
-2. **Run the server:**
-   ```bash
-   make run-server
-   ```
-
-3. **Run clients (in separate terminals):**
-   ```bash
-   make run-client

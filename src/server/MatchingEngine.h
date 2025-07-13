@@ -29,4 +29,6 @@ private:
     void process_matching(const std::string& symbol);
     bool validate_order(const std::string& symbol, OrderType type, OrderSide side,
                        double price, double quantity, const std::string& client_id);
+    void execute_market_buy_order(std::shared_ptr<OrderBook> book, std::shared_ptr<Order> buy_order);
+    void execute_market_sell_order(std::shared_ptr<OrderBook> book, std::shared_ptr<Order> sell_order);
 };

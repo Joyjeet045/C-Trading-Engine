@@ -148,3 +148,43 @@ bool OrderBook::execute_trade(std::shared_ptr<Order> buy_order, std::shared_ptr<
     std::cout << "Trade executed: " << trade_quantity << " @ " << trade_price << std::endl;
     return true;
 }
+
+double OrderBook::execute_market_order(std::shared_ptr<Order> market_order, OrderSide opposite_side, double max_quantity) {
+    std::lock_guard<std::mutex> lock(book_mutex);
+    
+    double total_executed = 0.0;
+    auto& opposite_orders = (opposite_side == OrderSide::BUY) ? buy_orders : sell_orders;
+    
+    while (total_executed < max_quantity && !opposite_orders.empty()) {
+        auto best_opposite = (opposite_side == OrderSide::BUY) ? opposite_orders.rbegin() : opposite_orders.begin();
+        
+        if (best_opposite->second.empty()) {
+            opposite_orders.erase(best_opposite);
+            continue;
+        }
+        
+        auto opposite_order = best_opposite->second.front();
+        double available_quantity = opposite_order->quantity - opposite_order->filled_quantity;
+        double market_remaining = max_quantity - total_executed;
+        double trade_quantity = std::min(available_quantity, market_remaining);
+        
+        if (trade_quantity <= 0) break;
+        
+        if (opposite_side == OrderSide::BUY) {
+            execute_trade(opposite_order, market_order);
+        } else {
+            execute_trade(market_order, opposite_order);
+        }
+        
+        total_executed += trade_quantity;
+        
+        if (opposite_order->filled_quantity >= opposite_order->quantity) {
+            best_opposite->second.erase(best_opposite->second.begin());
+            if (best_opposite->second.empty()) {
+                opposite_orders.erase(best_opposite);
+            }
+        }
+    }
+    
+    return total_executed;
+}

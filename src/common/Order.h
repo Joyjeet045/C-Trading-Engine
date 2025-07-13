@@ -16,7 +16,9 @@ enum class OrderSide {
 enum class OrderStatus {
     PENDING,
     FILLED,
-    CANCELLED
+    PARTIAL_FILLED,
+    CANCELLED,
+    REJECTED
 };
 
 struct Order {
