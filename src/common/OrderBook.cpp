@@ -120,12 +120,24 @@ void OrderBook::check_stop_loss_orders() {
         }
         
         if (trigger) {
+            std::cout << "Stop loss order " << order->id << " triggered at price " << last_trade_price << std::endl;
             order->type = OrderType::MARKET;
-            if (order->side == OrderSide::BUY) {
-                buy_orders[order->price].push_back(order);
+            double executed_quantity = execute_market_order(order, 
+                (order->side == OrderSide::BUY) ? OrderSide::SELL : OrderSide::BUY, 
+                order->quantity);
+            
+            if (executed_quantity == order->quantity) {
+                order->status = OrderStatus::FILLED;
+                std::cout << "Stop loss order " << order->id << " fully executed: " << executed_quantity << " shares" << std::endl;
+            } else if (executed_quantity > 0) {
+                order->status = OrderStatus::PARTIAL_FILLED;
+                std::cout << "Stop loss order " << order->id << " partially executed: " << executed_quantity << "/" << order->quantity << " shares" << std::endl;
+                std::cout << "Remaining " << (order->quantity - executed_quantity) << " shares rejected - no liquidity" << std::endl;
             } else {
-                sell_orders[order->price].push_back(order);
+                order->status = OrderStatus::REJECTED;
+                std::cout << "Stop loss order " << order->id << " rejected: no liquidity available" << std::endl;
             }
+            
             it = stop_loss_orders.erase(it);
         } else {
             ++it;
@@ -165,6 +177,7 @@ bool OrderBook::execute_trade(std::shared_ptr<Order> buy_order, std::shared_ptr<
     
     std::cout << "Trade executed: " << trade_quantity << " @ " << trade_price 
               << " between " << buy_order->client_id << " and " << sell_order->client_id << std::endl;
+    
     return true;
 }
 

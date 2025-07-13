@@ -68,10 +68,12 @@ void MatchingEngine::process_matching(const std::string& symbol) {
     
     auto book = order_books[symbol];
     if (!book) return;
-    
-    book->check_stop_loss_orders();
-    
+        
     auto matched_orders = book->match_orders();
+    
+    if (!matched_orders.empty()) {
+        book->check_stop_loss_orders();
+    }
     
     for (const auto& order : matched_orders) {
         std::cout << "Order " << order->id << " status: " 
