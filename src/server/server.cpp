@@ -7,12 +7,16 @@
 #include <sstream>
 #include <thread>
 #include <cstring>
+#include <unordered_map>
+#include <mutex>
 
 class TradingServer {
 private:
     MatchingEngine engine;
     int server_fd;
     static const int PORT = 8080;
+    std::unordered_map<std::string, int> active_sessions; // client_id -> client_fd
+    std::mutex sessions_mutex;
     
 public:
     TradingServer() : server_fd(-1) {}
@@ -63,29 +67,92 @@ public:
     
     void handle_client(int client_fd) {
         char buffer[1024];
+        std::string authenticated_client_id = "";
         
         while (true) {
             int bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
             if (bytes_read <= 0) break;
             
             buffer[bytes_read] = '\0';
-            std::string response = process_message(std::string(buffer));
+            std::string response = process_message(std::string(buffer), client_fd, authenticated_client_id);
+            
+            if (response.find("LOGIN_SUCCESS") == 0) {
+                size_t pos = response.find(":");
+                if (pos != std::string::npos) {
+                    authenticated_client_id = response.substr(pos + 1);
+                }
+            }
             
             send(client_fd, response.c_str(), response.length(), 0);
         }
         
+        if (!authenticated_client_id.empty()) {
+            remove_session(authenticated_client_id);
+        }
         close(client_fd);
     }
     
-    std::string process_message(const std::string& message) {
+    bool add_session(const std::string& client_id, int client_fd) {
+        std::lock_guard<std::mutex> lock(sessions_mutex);
+        
+        auto it = active_sessions.find(client_id);
+        if (it != active_sessions.end()) {
+            return false; // Client ID already in use
+        }
+        
+        active_sessions[client_id] = client_fd;
+        std::cout << "Client " << client_id << " logged in (FD: " << client_fd << ")" << std::endl;
+        return true;
+    }
+    
+    void remove_session(const std::string& client_id) {
+        std::lock_guard<std::mutex> lock(sessions_mutex);
+        
+        auto it = active_sessions.find(client_id);
+        if (it != active_sessions.end()) {
+            std::cout << "Client " << client_id << " logged out (FD: " << it->second << ")" << std::endl;
+            active_sessions.erase(it);
+        }
+    }
+    
+    bool is_authenticated(const std::string& client_id, int client_fd) {
+        std::lock_guard<std::mutex> lock(sessions_mutex);
+        
+        auto it = active_sessions.find(client_id);
+        return (it != active_sessions.end() && it->second == client_fd);
+    }
+    
+    std::string process_message(const std::string& message, int client_fd, const std::string& authenticated_client_id) {
         std::istringstream iss(message);
         std::string command;
         iss >> command;
         
-        if (command == "ORDER") {
+        if (command == "LOGIN") {
+            std::string client_id;
+            iss >> client_id;
+            
+            if (client_id.empty()) {
+                return "LOGIN_FAILED:Invalid client ID\n";
+            }
+            
+            if (add_session(client_id, client_fd)) {
+                return "LOGIN_SUCCESS:" + client_id + "\n";
+            } else {
+                return "LOGIN_FAILED:Client ID already in use\n";
+            }
+        }
+        else if (command == "ORDER") {
+            if (authenticated_client_id.empty()) {
+                return "ERROR:Not authenticated. Please LOGIN first.\n";
+            }
+            
             std::string symbol, type_str, side_str, client_id;
             double price, quantity;
             iss >> symbol >> type_str >> side_str >> price >> quantity >> client_id;
+            
+            if (client_id != authenticated_client_id) {
+                return "ERROR:Client ID mismatch. You can only place orders for your own account.\n";
+            }
             
             OrderType type = (type_str == "MARKET") ? OrderType::MARKET :
                            (type_str == "LIMIT") ? OrderType::LIMIT : OrderType::STOP_LOSS;
@@ -95,9 +162,17 @@ public:
             return "ORDER_ID:" + std::to_string(order_id) + "\n";
         }
         else if (command == "CANCEL") {
+            if (authenticated_client_id.empty()) {
+                return "ERROR:Not authenticated. Please LOGIN first.\n";
+            }
+            
             uint64_t order_id;
             std::string client_id;
             iss >> order_id >> client_id;
+            
+            if (client_id != authenticated_client_id) {
+                return "ERROR:Client ID mismatch. You can only cancel your own orders.\n";
+            }
             
             bool success = engine.cancel_order(order_id, client_id);
             return success ? "CANCELLED\n" : "CANCEL_FAILED\n";
@@ -113,6 +188,13 @@ public:
                        " LAST:" + std::to_string(book->get_last_price()) + "\n";
             }
             return "BOOK_NOT_FOUND\n";
+        }
+        else if (command == "LOGOUT") {
+            if (!authenticated_client_id.empty()) {
+                remove_session(authenticated_client_id);
+                return "LOGOUT_SUCCESS\n";
+            }
+            return "LOGOUT_FAILED:Not logged in\n";
         }
         
         return "UNKNOWN_COMMAND\n";

@@ -141,7 +141,14 @@ bool OrderBook::execute_trade(std::shared_ptr<Order> buy_order, std::shared_ptr<
     
     if (trade_quantity <= 0) return false;
     
-    double trade_price = sell_order->price; 
+    double trade_price;
+    if (buy_order->type == OrderType::MARKET) {
+        trade_price = sell_order->price; 
+    } else if (sell_order->type == OrderType::MARKET) {
+        trade_price = buy_order->price;   
+    } else {
+        trade_price = sell_order->price;  
+    }
     
     buy_order->filled_quantity += trade_quantity;
     sell_order->filled_quantity += trade_quantity;

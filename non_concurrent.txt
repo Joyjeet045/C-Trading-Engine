@@ -12,10 +12,54 @@ Terminal 3: make run-client (enter: CLIENT2)
 
 ========================================
 
+TEST CASE 0: AUTHENTICATION AND SESSION MANAGEMENT
+-------------------------------------------------
+
+Terminal 2 (CLIENT1):
+Enter client ID: CLIENT1
+Expected Output: 
+Connected to trading server
+Successfully logged in as CLIENT1
+
+Terminal 3 (CLIENT2):
+Enter client ID: CLIENT2
+Expected Output:
+Connected to trading server
+Successfully logged in as CLIENT2
+
+========================================
+
+TEST CASE 0.1: DUPLICATE CLIENT ID PREVENTION
+---------------------------------------------
+
+Terminal 4 (new terminal): make run-client
+Enter client ID: CLIENT1
+Expected Output:
+Connected to trading server
+Login failed: LOGIN_FAILED:Client ID already in use
+
+This demonstrates that only one session per client ID is allowed.
+
+========================================
+
+TEST CASE 0.2: AUTHENTICATION REQUIRED
+--------------------------------------
+
+Terminal 2 (CLIENT1):
+LOGOUT
+Expected Output: LOGOUT_SUCCESS
+
+Now try to place an order without logging in:
+ORDER
+Expected Output: Not authenticated. Please login first.
+
+========================================
+
 TEST CASE 1: BASIC LIMIT ORDER PLACEMENT
 ----------------------------------------
 
 Terminal 2 (CLIENT1):
+LOGIN CLIENT1
 ORDER
 AAPL
 LIMIT
@@ -26,6 +70,7 @@ BUY
 Expected Output: ORDER_ID:1
 
 Terminal 3 (CLIENT2):
+LOGIN CLIENT2
 ORDER
 AAPL
 LIMIT
@@ -92,7 +137,6 @@ Expected Output: ORDER_ID:5
 Terminal 2 (CLIENT1):
 CANCEL
 5
-CLIENT1
 
 Expected Output: CANCELLED
 
@@ -331,7 +375,6 @@ TEST CASE 12: CANCEL NON-EXISTENT ORDER
 Terminal 2 (CLIENT1):
 CANCEL
 99999
-CLIENT1
 
 Expected Output: CANCEL_FAILED
 
@@ -348,7 +391,30 @@ Expected Output: BOOK_NOT_FOUND
 
 ========================================
 
-TEST CASE 14: FINAL ORDER BOOK STATE
+TEST CASE 14: CLIENT ID MISMATCH PROTECTION
+------------------------------------------
+
+Terminal 2 (CLIENT1):
+ORDER
+AAPL
+LIMIT
+BUY
+150.00
+100
+CLIENT2
+
+Expected Output: ERROR:Client ID mismatch. You can only place orders for your own account.
+
+Terminal 2 (CLIENT1):
+CANCEL
+1
+CLIENT2
+
+Expected Output: ERROR:Client ID mismatch. You can only cancel your own orders.
+
+========================================
+
+TEST CASE 15: FINAL ORDER BOOK STATE
 ------------------------------------
 
 Terminal 2 (CLIENT1):
@@ -367,7 +433,7 @@ Expected Output: Should show remaining orders after all tests
 
 CLEANUP:
 --------
-Terminal 2 & 3: QUIT
+Terminal 2 & 3: LOGOUT or QUIT
 Terminal 1: Ctrl+C
 
 ========================================
@@ -377,48 +443,56 @@ DETAILED OUTPUT ANALYSIS
 
 EXPECTED BEHAVIORS TO OBSERVE:
 
-1. ORDER ID GENERATION:
+1. AUTHENTICATION:
+   - Clients must LOGIN before placing orders
+   - Only one session per client ID allowed
+   - Proper logout handling
+   - Session cleanup on disconnect
+
+2. ORDER ID GENERATION:
    - Each order gets unique sequential ID
    - IDs increment properly across clients
 
-2. ORDER BOOK DISPLAY:
+3. ORDER BOOK DISPLAY:
    - BID shows highest buy price
    - ASK shows lowest sell price
    - LAST shows last trade price
    - Format: BID:price ASK:price LAST:price
 
-3. MARKET ORDER EXECUTION:
+4. MARKET ORDER EXECUTION:
    - Immediate execution against available orders
    - Best price execution (lowest ask for BUY, highest bid for SELL)
    - Partial fills show executed/total quantities
    - Rejection when no liquidity available
 
-4. LIMIT ORDER BEHAVIOR:
+5. LIMIT ORDER BEHAVIOR:
    - Orders added to book at specified price
    - Partial fills keep orders in book (status remains PENDING)
    - Full fills remove orders from book (status becomes FILLED)
    - FIFO execution at same price level
 
-5. STOP LOSS TRIGGERING:
+6. STOP LOSS TRIGGERING:
    - Orders trigger when price crosses threshold
    - Convert to market orders when triggered
    - Immediate execution after conversion
 
-6. ORDER CANCELLATION:
+7. ORDER CANCELLATION:
    - Only owner can cancel orders
    - Cancelled orders removed from book
    - Status updated to CANCELLED
 
-7. TRADE EXECUTION MESSAGES:
+8. TRADE EXECUTION MESSAGES:
    - "Trade executed: quantity @ price"
    - Order status updates after trades
    - Last trade price updates
 
-8. ERROR HANDLING:
+9. ERROR HANDLING:
    - Invalid commands return UNKNOWN_COMMAND
    - Invalid parameters handled gracefully
    - Non-existent orders return CANCEL_FAILED
    - Non-existent symbols return BOOK_NOT_FOUND
+   - Authentication errors for unauthenticated clients
+   - Client ID mismatch errors
 
 POTENTIAL ISSUES TO WATCH FOR:
 - Orders not matching when they should
@@ -429,6 +503,9 @@ POTENTIAL ISSUES TO WATCH FOR:
 - Memory leaks
 - Incorrect price calculations
 - Orders not being filled in correct order (FIFO)
+- Authentication bypass attempts
+- Duplicate client ID sessions
+- Session cleanup issues
 
 SUCCESS CRITERIA:
 - All order types work correctly
@@ -438,4 +515,7 @@ SUCCESS CRITERIA:
 - Order cancellation works properly
 - Error handling works for invalid inputs
 - Order book displays correct state
+- Authentication prevents unauthorized access
+- Duplicate client IDs are rejected
+- Sessions are properly managed
 - No server crashes or hangs 
