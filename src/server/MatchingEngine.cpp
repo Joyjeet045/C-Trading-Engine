@@ -81,6 +81,7 @@ void MatchingEngine::process_matching(const std::string& symbol) {
 
 bool MatchingEngine::validate_order(const std::string& symbol, OrderType type, OrderSide side,
                                    double price, double quantity, const std::string& client_id) {
+    (void)side; 
     if (symbol.empty() || client_id.empty()) return false;
     if (quantity <= 0) return false;
     if (type == OrderType::LIMIT && price <= 0) return false;
@@ -101,6 +102,7 @@ void MatchingEngine::execute_market_buy_order(std::shared_ptr<OrderBook> book, s
         buy_order->status = OrderStatus::REJECTED;
         std::cout << "Market BUY order " << buy_order->id << " rejected: no liquidity" << std::endl;
     }
+    book->check_stop_loss_orders();
 }
 
 void MatchingEngine::execute_market_sell_order(std::shared_ptr<OrderBook> book, std::shared_ptr<Order> sell_order) {
@@ -116,4 +118,5 @@ void MatchingEngine::execute_market_sell_order(std::shared_ptr<OrderBook> book, 
         sell_order->status = OrderStatus::REJECTED;
         std::cout << "Market SELL order " << sell_order->id << " rejected: no liquidity" << std::endl;
     }
+    book->check_stop_loss_orders();
 }

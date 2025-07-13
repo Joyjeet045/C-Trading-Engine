@@ -1,0 +1,441 @@
+COMPREHENSIVE TRADING ENGINE TEST GUIDE
+========================================
+
+PREREQUISITES:
+1. Build: make all
+2. Open 3 terminal windows/tabs
+
+SETUP:
+Terminal 1: make run-server
+Terminal 2: make run-client (enter: CLIENT1)
+Terminal 3: make run-client (enter: CLIENT2)
+
+========================================
+
+TEST CASE 1: BASIC LIMIT ORDER PLACEMENT
+----------------------------------------
+
+Terminal 2 (CLIENT1):
+ORDER
+AAPL
+LIMIT
+BUY
+150.00
+100
+
+Expected Output: ORDER_ID:1
+
+Terminal 3 (CLIENT2):
+ORDER
+AAPL
+LIMIT
+SELL
+151.00
+50
+
+Expected Output: ORDER_ID:2
+
+========================================
+
+TEST CASE 2: ORDER BOOK QUERY
+-----------------------------
+
+Terminal 2 (CLIENT1):
+BOOK
+AAPL
+
+Expected Output: BID:150.00 ASK:151.00 LAST:0.00
+
+========================================
+
+TEST CASE 3: MARKET ORDER EXECUTION
+-----------------------------------
+
+Terminal 3 (CLIENT2):
+ORDER
+AAPL
+LIMIT
+SELL
+150.50
+25
+
+Expected Output: ORDER_ID:3
+
+Terminal 2 (CLIENT1):
+ORDER
+AAPL
+MARKET
+BUY
+0.00
+25
+
+Expected Output: 
+ORDER_ID:4
+Market BUY order 4 fully filled: 25 shares
+Trade executed: 25 @ 150.50
+
+========================================
+
+TEST CASE 4: ORDER CANCELLATION
+-------------------------------
+
+Terminal 2 (CLIENT1):
+ORDER
+MSFT
+LIMIT
+BUY
+200.00
+75
+
+Expected Output: ORDER_ID:5
+
+Terminal 2 (CLIENT1):
+CANCEL
+5
+CLIENT1
+
+Expected Output: CANCELLED
+
+========================================
+
+TEST CASE 5: MULTIPLE SYMBOL TRADING
+-----------------------------------
+
+Terminal 2 (CLIENT1):
+ORDER
+GOOGL
+LIMIT
+BUY
+2500.00
+10
+
+Expected Output: ORDER_ID:6
+
+Terminal 3 (CLIENT2):
+ORDER
+TSLA
+LIMIT
+SELL
+800.00
+25
+
+Expected Output: ORDER_ID:7
+
+========================================
+
+TEST CASE 6: STOP LOSS ORDER TRIGGERING
+---------------------------------------
+
+Terminal 2 (CLIENT1):
+ORDER
+TSLA
+STOP_LOSS
+SELL
+800.00
+25
+
+Expected Output: ORDER_ID:8
+
+Terminal 3 (CLIENT2):
+ORDER
+TSLA
+LIMIT
+BUY
+800.00
+25
+
+Expected Output: 
+ORDER_ID:9
+Trade executed: 25 @ 800.00
+Order 8 status: FILLED
+Order 9 status: FILLED
+
+========================================
+
+TEST CASE 7: LARGE ORDER PARTIAL FILLS
+--------------------------------------
+
+Terminal 2 (CLIENT1):
+ORDER
+NVDA
+LIMIT
+BUY
+500.00
+1000
+
+Expected Output: ORDER_ID:10
+
+Terminal 3 (CLIENT2):
+ORDER
+NVDA
+LIMIT
+SELL
+500.00
+300
+
+Expected Output: 
+ORDER_ID:11
+Trade executed: 300 @ 500.00
+Order 10 status: PARTIAL
+Order 11 status: FILLED
+
+Terminal 3 (CLIENT2):
+ORDER
+NVDA
+LIMIT
+SELL
+500.00
+400
+
+Expected Output: 
+ORDER_ID:12
+Trade executed: 400 @ 500.00
+Order 10 status: PARTIAL
+
+Terminal 3 (CLIENT2):
+ORDER
+NVDA
+LIMIT
+SELL
+500.00
+300
+
+Expected Output: 
+ORDER_ID:13
+Trade executed: 300 @ 500.00
+Order 10 status: FILLED
+
+========================================
+
+TEST CASE 8: PRICE LEVEL TESTING
+--------------------------------
+
+Terminal 2 (CLIENT1):
+ORDER
+AMZN
+LIMIT
+BUY
+3000.00
+10
+
+Expected Output: ORDER_ID:14
+
+Terminal 2 (CLIENT1):
+ORDER
+AMZN
+LIMIT
+BUY
+2999.00
+10
+
+Expected Output: ORDER_ID:15
+
+Terminal 2 (CLIENT1):
+ORDER
+AMZN
+LIMIT
+BUY
+2998.00
+10
+
+Expected Output: ORDER_ID:16
+
+Terminal 3 (CLIENT2):
+ORDER
+AMZN
+LIMIT
+SELL
+2998.00
+30
+
+Expected Output: 
+ORDER_ID:17
+Trade executed: 10 @ 2998.00
+Trade executed: 10 @ 2999.00
+Trade executed: 10 @ 3000.00
+Order 16 status: FILLED
+Order 15 status: FILLED
+Order 14 status: FILLED
+Order 17 status: FILLED
+
+========================================
+
+TEST CASE 9: MARKET ORDER PARTIAL FILL
+--------------------------------------
+
+Terminal 3 (CLIENT2):
+ORDER
+META
+LIMIT
+SELL
+300.00
+25
+
+Expected Output: ORDER_ID:18
+
+Terminal 2 (CLIENT1):
+ORDER
+META
+MARKET
+BUY
+0.00
+100
+
+Expected Output: 
+ORDER_ID:19
+Market BUY order 19 partially filled: 25/100 shares
+Trade executed: 25 @ 300.00
+
+========================================
+
+TEST CASE 10: MARKET ORDER NO LIQUIDITY
+---------------------------------------
+
+Terminal 2 (CLIENT1):
+ORDER
+NFLX
+MARKET
+BUY
+0.00
+50
+
+Expected Output: 
+ORDER_ID:20
+Market BUY order 20 rejected: no liquidity
+
+========================================
+
+TEST CASE 11: ERROR HANDLING
+----------------------------
+
+Terminal 2 (CLIENT1):
+INVALID_COMMAND
+
+Expected Output: UNKNOWN_COMMAND
+
+Terminal 2 (CLIENT1):
+ORDER
+INVALID_SYMBOL
+INVALID_TYPE
+INVALID_SIDE
+-100
+-50
+
+Expected Output: Should handle invalid parameters gracefully
+
+========================================
+
+TEST CASE 12: CANCEL NON-EXISTENT ORDER
+---------------------------------------
+
+Terminal 2 (CLIENT1):
+CANCEL
+99999
+CLIENT1
+
+Expected Output: CANCEL_FAILED
+
+========================================
+
+TEST CASE 13: BOOK FOR NON-EXISTENT SYMBOL
+-----------------------------------------
+
+Terminal 2 (CLIENT1):
+BOOK
+NONEXISTENT
+
+Expected Output: BOOK_NOT_FOUND
+
+========================================
+
+TEST CASE 14: FINAL ORDER BOOK STATE
+------------------------------------
+
+Terminal 2 (CLIENT1):
+BOOK
+AAPL
+
+Expected Output: Should show remaining orders after all tests
+
+Terminal 3 (CLIENT2):
+BOOK
+GOOGL
+
+Expected Output: Should show remaining orders after all tests
+
+========================================
+
+CLEANUP:
+--------
+Terminal 2 & 3: QUIT
+Terminal 1: Ctrl+C
+
+========================================
+
+DETAILED OUTPUT ANALYSIS
+========================
+
+EXPECTED BEHAVIORS TO OBSERVE:
+
+1. ORDER ID GENERATION:
+   - Each order gets unique sequential ID
+   - IDs increment properly across clients
+
+2. ORDER BOOK DISPLAY:
+   - BID shows highest buy price
+   - ASK shows lowest sell price
+   - LAST shows last trade price
+   - Format: BID:price ASK:price LAST:price
+
+3. MARKET ORDER EXECUTION:
+   - Immediate execution against available orders
+   - Best price execution (lowest ask for BUY, highest bid for SELL)
+   - Partial fills show executed/total quantities
+   - Rejection when no liquidity available
+
+4. LIMIT ORDER BEHAVIOR:
+   - Orders added to book at specified price
+   - Partial fills keep orders in book (status remains PENDING)
+   - Full fills remove orders from book (status becomes FILLED)
+   - FIFO execution at same price level
+
+5. STOP LOSS TRIGGERING:
+   - Orders trigger when price crosses threshold
+   - Convert to market orders when triggered
+   - Immediate execution after conversion
+
+6. ORDER CANCELLATION:
+   - Only owner can cancel orders
+   - Cancelled orders removed from book
+   - Status updated to CANCELLED
+
+7. TRADE EXECUTION MESSAGES:
+   - "Trade executed: quantity @ price"
+   - Order status updates after trades
+   - Last trade price updates
+
+8. ERROR HANDLING:
+   - Invalid commands return UNKNOWN_COMMAND
+   - Invalid parameters handled gracefully
+   - Non-existent orders return CANCEL_FAILED
+   - Non-existent symbols return BOOK_NOT_FOUND
+
+POTENTIAL ISSUES TO WATCH FOR:
+- Orders not matching when they should
+- Incorrect order book state
+- Orders not being cancelled properly
+- Server crashes or hangs
+- Incorrect order IDs
+- Memory leaks
+- Incorrect price calculations
+- Orders not being filled in correct order (FIFO)
+
+SUCCESS CRITERIA:
+- All order types work correctly
+- Market orders execute immediately
+- Limit orders maintain price-time priority
+- Stop loss orders trigger at correct prices
+- Order cancellation works properly
+- Error handling works for invalid inputs
+- Order book displays correct state
+- No server crashes or hangs 

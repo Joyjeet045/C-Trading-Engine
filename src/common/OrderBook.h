@@ -10,7 +10,7 @@ private:
     std::map<double, std::vector<std::shared_ptr<Order>>> buy_orders;
     std::map<double, std::vector<std::shared_ptr<Order>>> sell_orders;
     std::vector<std::shared_ptr<Order>> stop_loss_orders;
-    std::mutex book_mutex;
+    mutable std::mutex book_mutex;
     double last_trade_price;
     std::string symbol;
 
