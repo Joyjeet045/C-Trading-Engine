@@ -30,6 +30,9 @@ uint64_t MatchingEngine::submit_order(const std::string& symbol, OrderType type,
         } else {
             execute_market_sell_order(book, order);
         }
+    } else if (type == OrderType::STOP_LOSS) {
+        book->add_order(order);
+        book->check_stop_loss_orders();
     } else {
         book->add_order(order);
         thread_pool.enqueue([this, symbol]() {

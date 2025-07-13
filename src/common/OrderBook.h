@@ -30,4 +30,6 @@ public:
 private:
     void remove_order_from_book(std::shared_ptr<Order> order);
     bool execute_trade(std::shared_ptr<Order> buy_order, std::shared_ptr<Order> sell_order);
+    bool should_trigger_stop_loss(std::shared_ptr<Order> order) const;
+    void execute_stop_loss_order(std::shared_ptr<Order> order, const std::string& trigger_context);
 };

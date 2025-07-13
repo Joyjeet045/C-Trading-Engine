@@ -8,6 +8,10 @@ void OrderBook::add_order(std::shared_ptr<Order> order) {
     std::lock_guard<std::mutex> lock(book_mutex);
     
     if (order->type == OrderType::STOP_LOSS) {
+        if (should_trigger_stop_loss(order)) {
+            execute_stop_loss_order(order, "immediately");
+            return; 
+        }
         stop_loss_orders.push_back(order);
         return;
     }
@@ -111,33 +115,9 @@ void OrderBook::check_stop_loss_orders() {
     
     for (auto it = stop_loss_orders.begin(); it != stop_loss_orders.end();) {
         auto order = *it;
-        bool trigger = false;
         
-        if (order->side == OrderSide::SELL && last_trade_price <= order->price) {
-            trigger = true;
-        } else if (order->side == OrderSide::BUY && last_trade_price >= order->price) {
-            trigger = true;
-        }
-        
-        if (trigger) {
-            std::cout << "Stop loss order " << order->id << " triggered at price " << last_trade_price << std::endl;
-            order->type = OrderType::MARKET;
-            double executed_quantity = execute_market_order(order, 
-                (order->side == OrderSide::BUY) ? OrderSide::SELL : OrderSide::BUY, 
-                order->quantity);
-            
-            if (executed_quantity == order->quantity) {
-                order->status = OrderStatus::FILLED;
-                std::cout << "Stop loss order " << order->id << " fully executed: " << executed_quantity << " shares" << std::endl;
-            } else if (executed_quantity > 0) {
-                order->status = OrderStatus::PARTIAL_FILLED;
-                std::cout << "Stop loss order " << order->id << " partially executed: " << executed_quantity << "/" << order->quantity << " shares" << std::endl;
-                std::cout << "Remaining " << (order->quantity - executed_quantity) << " shares rejected - no liquidity" << std::endl;
-            } else {
-                order->status = OrderStatus::REJECTED;
-                std::cout << "Stop loss order " << order->id << " rejected: no liquidity available" << std::endl;
-            }
-            
+        if (should_trigger_stop_loss(order)) {
+            execute_stop_loss_order(order, "due to price movement");
             it = stop_loss_orders.erase(it);
         } else {
             ++it;
@@ -245,4 +225,38 @@ double OrderBook::execute_market_order(std::shared_ptr<Order> market_order, Orde
         }
     }
     return total_executed;
+}
+
+bool OrderBook::should_trigger_stop_loss(std::shared_ptr<Order> order) const {
+    if (last_trade_price <= 0.0) {
+        return false;
+    }
+    
+    if (order->side == OrderSide::SELL && last_trade_price <= order->price) {
+        return true;
+    } else if (order->side == OrderSide::BUY && last_trade_price >= order->price) {
+        return true;
+    }
+    
+    return false;
+}
+
+void OrderBook::execute_stop_loss_order(std::shared_ptr<Order> order, const std::string& trigger_context) {
+    std::cout << "Stop loss order " << order->id << " triggered " << trigger_context << " at price " << last_trade_price << std::endl;
+    order->type = OrderType::MARKET;
+    double executed_quantity = execute_market_order(order, 
+        (order->side == OrderSide::BUY) ? OrderSide::SELL : OrderSide::BUY, 
+        order->quantity);
+    
+    if (executed_quantity == order->quantity) {
+        order->status = OrderStatus::FILLED;
+        std::cout << "Stop loss order " << order->id << " fully executed: " << executed_quantity << " shares" << std::endl;
+    } else if (executed_quantity > 0) {
+        order->status = OrderStatus::PARTIAL_FILLED;
+        std::cout << "Stop loss order " << order->id << " partially executed: " << executed_quantity << "/" << order->quantity << " shares" << std::endl;
+        std::cout << "Remaining " << (order->quantity - executed_quantity) << " shares rejected - no liquidity" << std::endl;
+    } else {
+        order->status = OrderStatus::REJECTED;
+        std::cout << "Stop loss order " << order->id << " rejected: no liquidity available" << std::endl;
+    }
 }
