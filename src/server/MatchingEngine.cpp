@@ -30,7 +30,7 @@ uint64_t MatchingEngine::submit_order(const std::string& symbol, OrderType type,
         } else {
             execute_market_sell_order(book, order);
         }
-    } else if (type == OrderType::STOP_LOSS) {
+    } else if (type == OrderType::STOP_LOSS || type == OrderType::STOP_LIMIT || type == OrderType::TRAILING_STOP) {
         book->add_order(order);
         book->check_stop_loss_orders();
     } else {
@@ -39,6 +39,58 @@ uint64_t MatchingEngine::submit_order(const std::string& symbol, OrderType type,
             process_matching(symbol);
         });
     }
+    
+    return order_id;
+}
+
+uint64_t MatchingEngine::submit_stop_limit_order(const std::string& symbol, OrderSide side,
+                                                double stop_price, double limit_price, double quantity, 
+                                                const std::string& client_id) {
+    
+    if (!validate_stop_limit_order(symbol, side, stop_price, limit_price, quantity, client_id)) {
+        return 0; 
+    }
+    
+    uint64_t order_id = next_order_id++;
+    
+    std::lock_guard<std::mutex> lock(engine_mutex);
+    
+    if (order_books.find(symbol) == order_books.end()) {
+        order_books[symbol] = std::make_shared<OrderBook>(symbol);
+    }
+    
+    auto order = std::make_shared<Order>(order_id, symbol, OrderType::STOP_LIMIT, side, stop_price, limit_price, quantity, client_id);
+    client_orders[client_id].push_back(order_id);
+    
+    auto book = order_books[symbol];
+    book->add_order(order);
+    book->check_stop_loss_orders();
+    
+    return order_id;
+}
+
+uint64_t MatchingEngine::submit_trailing_stop_order(const std::string& symbol, OrderSide side,
+                                                   double trailing_amount, double quantity, 
+                                                   const std::string& client_id) {
+    
+    if (!validate_trailing_stop_order(symbol, side, trailing_amount, quantity, client_id)) {
+        return 0; 
+    }
+    
+    uint64_t order_id = next_order_id++;
+    
+    std::lock_guard<std::mutex> lock(engine_mutex);
+    
+    if (order_books.find(symbol) == order_books.end()) {
+        order_books[symbol] = std::make_shared<OrderBook>(symbol);
+    }
+    
+    auto order = std::make_shared<Order>(order_id, symbol, OrderType::TRAILING_STOP, side, trailing_amount, quantity, client_id);
+    client_orders[client_id].push_back(order_id);
+    
+    auto book = order_books[symbol];
+    book->add_order(order);
+    book->check_stop_loss_orders();
     
     return order_id;
 }
@@ -90,6 +142,31 @@ bool MatchingEngine::validate_order(const std::string& symbol, OrderType type, O
     if (symbol.empty() || client_id.empty()) return false;
     if (quantity <= 0) return false;
     if (type == OrderType::LIMIT && price <= 0) return false;
+    
+    return true;
+}
+
+bool MatchingEngine::validate_stop_limit_order(const std::string& symbol, OrderSide side,
+                                              double stop_price, double limit_price, double quantity, 
+                                              const std::string& client_id) {
+    if (symbol.empty() || client_id.empty()) return false;
+    if (quantity <= 0) return false;
+    if (stop_price <= 0 || limit_price <= 0) return false;
+    
+    // For SELL stop limit: stop_price should be <= limit_price (trigger when price falls)
+    // For BUY stop limit: stop_price should be >= limit_price (trigger when price rises)
+    if (side == OrderSide::SELL && stop_price > limit_price) return false;
+    if (side == OrderSide::BUY && stop_price < limit_price) return false;
+    
+    return true;
+}
+
+bool MatchingEngine::validate_trailing_stop_order(const std::string& symbol, OrderSide side,
+                                                 double trailing_amount, double quantity, 
+                                                 const std::string& client_id) {
+    if (symbol.empty() || client_id.empty()) return false;
+    if (quantity <= 0) return false;
+    if (trailing_amount <= 0) return false;
     
     return true;
 }

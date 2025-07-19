@@ -18,13 +18,20 @@ CLIENT_SOURCES = $(SRCDIR)/client/client.cpp
 CLIENT_OBJECTS = $(CLIENT_SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
 CLIENT_TARGET = $(BINDIR)/client
 
-.PHONY: all clean server client
+# Test
+TEST_SOURCES = test_trading_engine.cpp $(SRCDIR)/server/MatchingEngine.cpp $(SRCDIR)/common/OrderBook.cpp
+TEST_OBJECTS = $(TEST_SOURCES:%.cpp=$(OBJDIR)/%.o)
+TEST_TARGET = $(BINDIR)/test_engine
 
-all: server client
+.PHONY: all clean server client test
+
+all: server client test
 
 server: $(SERVER_TARGET)
 
 client: $(CLIENT_TARGET)
+
+test: $(TEST_TARGET)
 
 $(SERVER_TARGET): $(SERVER_OBJECTS)
 	@mkdir -p $(dir $@)
@@ -34,7 +41,15 @@ $(CLIENT_TARGET): $(CLIENT_OBJECTS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
+$(TEST_TARGET): $(TEST_OBJECTS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(OBJDIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
@@ -46,3 +61,6 @@ run-server: server
 
 run-client: client
 	./$(CLIENT_TARGET)
+
+run-test: test
+	./$(TEST_TARGET)

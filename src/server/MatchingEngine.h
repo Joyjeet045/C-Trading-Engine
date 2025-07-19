@@ -21,6 +21,14 @@ public:
     uint64_t submit_order(const std::string& symbol, OrderType type, OrderSide side,
                          double price, double quantity, const std::string& client_id);
     
+    uint64_t submit_stop_limit_order(const std::string& symbol, OrderSide side,
+                                    double stop_price, double limit_price, double quantity, 
+                                    const std::string& client_id);
+    
+    uint64_t submit_trailing_stop_order(const std::string& symbol, OrderSide side,
+                                       double trailing_amount, double quantity, 
+                                       const std::string& client_id);
+    
     bool cancel_order(uint64_t order_id, const std::string& client_id);
     
     std::shared_ptr<OrderBook> get_order_book(const std::string& symbol);
@@ -29,6 +37,12 @@ private:
     void process_matching(const std::string& symbol);
     bool validate_order(const std::string& symbol, OrderType type, OrderSide side,
                        double price, double quantity, const std::string& client_id);
+    bool validate_stop_limit_order(const std::string& symbol, OrderSide side,
+                                  double stop_price, double limit_price, double quantity, 
+                                  const std::string& client_id);
+    bool validate_trailing_stop_order(const std::string& symbol, OrderSide side,
+                                     double trailing_amount, double quantity, 
+                                     const std::string& client_id);
     void execute_market_buy_order(std::shared_ptr<OrderBook> book, std::shared_ptr<Order> buy_order);
     void execute_market_sell_order(std::shared_ptr<OrderBook> book, std::shared_ptr<Order> sell_order);
 };

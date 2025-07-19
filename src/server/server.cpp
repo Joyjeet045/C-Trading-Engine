@@ -154,11 +154,60 @@ public:
                 return "ERROR:Client ID mismatch. You can only place orders for your own account.\n";
             }
             
-            OrderType type = (type_str == "MARKET") ? OrderType::MARKET :
-                           (type_str == "LIMIT") ? OrderType::LIMIT : OrderType::STOP_LOSS;
+            OrderType type;
+            if (type_str == "MARKET") {
+                type = OrderType::MARKET;
+            } else if (type_str == "LIMIT") {
+                type = OrderType::LIMIT;
+            } else if (type_str == "STOP_LOSS") {
+                type = OrderType::STOP_LOSS;
+            } else if (type_str == "STOP_LIMIT") {
+                type = OrderType::STOP_LIMIT;
+            } else if (type_str == "TRAILING_STOP") {
+                type = OrderType::TRAILING_STOP;
+            } else {
+                return "ERROR:Invalid order type. Use MARKET, LIMIT, STOP_LOSS, STOP_LIMIT, or TRAILING_STOP.\n";
+            }
+            
             OrderSide side = (side_str == "BUY") ? OrderSide::BUY : OrderSide::SELL;
             
             uint64_t order_id = engine.submit_order(symbol, type, side, price, quantity, client_id);
+            return "ORDER_ID:" + std::to_string(order_id) + "\n";
+        }
+        else if (command == "STOP_LIMIT_ORDER") {
+            if (authenticated_client_id.empty()) {
+                return "ERROR:Not authenticated. Please LOGIN first.\n";
+            }
+            
+            std::string symbol, side_str, client_id;
+            double stop_price, limit_price, quantity;
+            iss >> symbol >> side_str >> stop_price >> limit_price >> quantity >> client_id;
+            
+            if (client_id != authenticated_client_id) {
+                return "ERROR:Client ID mismatch. You can only place orders for your own account.\n";
+            }
+            
+            OrderSide side = (side_str == "BUY") ? OrderSide::BUY : OrderSide::SELL;
+            
+            uint64_t order_id = engine.submit_stop_limit_order(symbol, side, stop_price, limit_price, quantity, client_id);
+            return "ORDER_ID:" + std::to_string(order_id) + "\n";
+        }
+        else if (command == "TRAILING_STOP_ORDER") {
+            if (authenticated_client_id.empty()) {
+                return "ERROR:Not authenticated. Please LOGIN first.\n";
+            }
+            
+            std::string symbol, side_str, client_id;
+            double trailing_amount, quantity;
+            iss >> symbol >> side_str >> trailing_amount >> quantity >> client_id;
+            
+            if (client_id != authenticated_client_id) {
+                return "ERROR:Client ID mismatch. You can only place orders for your own account.\n";
+            }
+            
+            OrderSide side = (side_str == "BUY") ? OrderSide::BUY : OrderSide::SELL;
+            
+            uint64_t order_id = engine.submit_trailing_stop_order(symbol, side, trailing_amount, quantity, client_id);
             return "ORDER_ID:" + std::to_string(order_id) + "\n";
         }
         else if (command == "CANCEL") {

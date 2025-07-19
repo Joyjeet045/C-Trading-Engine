@@ -74,7 +74,7 @@ public:
         std::string input;
         
         while (true) {
-            std::cout << "\nCommands: ORDER, CANCEL, BOOK, LOGOUT, QUIT" << std::endl;
+            std::cout << "\nCommands: ORDER, STOP_LIMIT_ORDER, TRAILING_STOP_ORDER, CANCEL, BOOK, LOGOUT, QUIT" << std::endl;
             std::cout << "Enter command: ";
             std::getline(std::cin, input);
             
@@ -85,6 +85,10 @@ public:
             
             if (input == "ORDER") {
                 place_order();
+            } else if (input == "STOP_LIMIT_ORDER") {
+                place_stop_limit_order();
+            } else if (input == "TRAILING_STOP_ORDER") {
+                place_trailing_stop_order();
             } else if (input == "CANCEL") {
                 cancel_order();
             } else if (input == "BOOK") {
@@ -109,7 +113,7 @@ public:
         
         std::cout << "Symbol: ";
         std::cin >> symbol;
-        std::cout << "Type (MARKET/LIMIT/STOP_LOSS): ";
+        std::cout << "Type (MARKET/LIMIT/STOP_LOSS/STOP_LIMIT/TRAILING_STOP): ";
         std::cin >> type;
         std::cout << "Side (BUY/SELL): ";
         std::cin >> side;
@@ -120,6 +124,57 @@ public:
         
         std::string message = "ORDER " + symbol + " " + type + " " + side + " " + 
                              std::to_string(price) + " " + std::to_string(quantity) + " " + client_id;
+        
+        send_message(message);
+    }
+    
+    void place_stop_limit_order() {
+        if (!authenticated) {
+            std::cout << "Not authenticated. Please login first." << std::endl;
+            return;
+        }
+        
+        std::string symbol, side;
+        double stop_price, limit_price, quantity;
+        
+        std::cout << "Symbol: ";
+        std::cin >> symbol;
+        std::cout << "Side (BUY/SELL): ";
+        std::cin >> side;
+        std::cout << "Stop Price: ";
+        std::cin >> stop_price;
+        std::cout << "Limit Price: ";
+        std::cin >> limit_price;
+        std::cout << "Quantity: ";
+        std::cin >> quantity;
+        
+        std::string message = "STOP_LIMIT_ORDER " + symbol + " " + side + " " + 
+                             std::to_string(stop_price) + " " + std::to_string(limit_price) + " " + 
+                             std::to_string(quantity) + " " + client_id;
+        
+        send_message(message);
+    }
+    
+    void place_trailing_stop_order() {
+        if (!authenticated) {
+            std::cout << "Not authenticated. Please login first." << std::endl;
+            return;
+        }
+        
+        std::string symbol, side;
+        double trailing_amount, quantity;
+        
+        std::cout << "Symbol: ";
+        std::cin >> symbol;
+        std::cout << "Side (BUY/SELL): ";
+        std::cin >> side;
+        std::cout << "Trailing Amount ($): ";
+        std::cin >> trailing_amount;
+        std::cout << "Quantity: ";
+        std::cin >> quantity;
+        
+        std::string message = "TRAILING_STOP_ORDER " + symbol + " " + side + " " + 
+                             std::to_string(trailing_amount) + " " + std::to_string(quantity) + " " + client_id;
         
         send_message(message);
     }

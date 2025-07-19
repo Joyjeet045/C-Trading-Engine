@@ -7,7 +7,7 @@ OrderBook::OrderBook(const std::string& _symbol) :  last_trade_price(0.0),symbol
 void OrderBook::add_order(std::shared_ptr<Order> order) {
     std::lock_guard<std::mutex> lock(book_mutex);
     
-    if (order->type == OrderType::STOP_LOSS) {
+    if (order->type == OrderType::STOP_LOSS || order->type == OrderType::STOP_LIMIT || order->type == OrderType::TRAILING_STOP) {
         if (should_trigger_stop_loss(order)) {
             execute_stop_loss_order(order, "immediately");
             return; 
@@ -115,6 +115,11 @@ void OrderBook::check_stop_loss_orders() {
     
     for (auto it = stop_loss_orders.begin(); it != stop_loss_orders.end();) {
         auto order = *it;
+        
+        // Update trailing stop prices if needed
+        if (order->type == OrderType::TRAILING_STOP) {
+            update_trailing_stop_price(order);
+        }
         
         if (should_trigger_stop_loss(order)) {
             execute_stop_loss_order(order, "due to price movement");
@@ -244,21 +249,56 @@ bool OrderBook::should_trigger_stop_loss(std::shared_ptr<Order> order) const {
         return false;
     }
     
-    if (order->side == OrderSide::SELL && last_trade_price <= order->price) {
-        return true;
-    } else if (order->side == OrderSide::BUY && last_trade_price >= order->price) {
-        return true;
+    if (order->type == OrderType::TRAILING_STOP) {
+        // For TRAILING_STOP, check if current price has moved against the trailing stop
+        if (order->side == OrderSide::SELL) {
+            return last_trade_price <= order->price;
+        } else if (order->side == OrderSide::BUY) {
+            return last_trade_price >= order->price;
+        }
+    } else {
+        // For STOP_LOSS and STOP_LIMIT, use the original logic
+        if (order->side == OrderSide::SELL && last_trade_price <= order->price) {
+            return true;
+        } else if (order->side == OrderSide::BUY && last_trade_price >= order->price) {
+            return true;
+        }
     }
     
     return false;
 }
 
 void OrderBook::execute_stop_loss_order(std::shared_ptr<Order> order, const std::string& trigger_context) {
-    std::cout << "Stop loss order " << order->id << " triggered " << trigger_context << " at price " << last_trade_price << std::endl;
-    order->type = OrderType::MARKET;
-    double executed_quantity = execute_market_order(order, 
-        (order->side == OrderSide::BUY) ? OrderSide::SELL : OrderSide::BUY, 
-        order->quantity);
+    std::cout << "Stop order " << order->id << " triggered " << trigger_context << " at price " << last_trade_price << std::endl;
+    
+    double executed_quantity = 0.0;
+    
+    if (order->type == OrderType::STOP_LOSS) {
+        // Convert to market order and execute immediately
+        order->type = OrderType::MARKET;
+        executed_quantity = execute_market_order(order, 
+            (order->side == OrderSide::BUY) ? OrderSide::SELL : OrderSide::BUY, 
+            order->quantity);
+    } else if (order->type == OrderType::STOP_LIMIT) {
+        // Convert to limit order and add to order book
+        order->type = OrderType::LIMIT;
+        order->price = order->limit_price; // Use the limit price for the limit order
+        
+        if (order->side == OrderSide::BUY) {
+            buy_orders[order->price].push_back(order);
+        } else {
+            sell_orders[order->price].push_back(order);
+        }
+        
+        std::cout << "Stop limit order " << order->id << " converted to limit order at price " << order->price << std::endl;
+        return; // Don't set status yet, let normal matching handle it
+    } else if (order->type == OrderType::TRAILING_STOP) {
+        // Convert to market order and execute immediately
+        order->type = OrderType::MARKET;
+        executed_quantity = execute_market_order(order, 
+            (order->side == OrderSide::BUY) ? OrderSide::SELL : OrderSide::BUY, 
+            order->quantity);
+    }
     
     if (executed_quantity == order->quantity) {
         order->status = OrderStatus::FILLED;
@@ -270,5 +310,29 @@ void OrderBook::execute_stop_loss_order(std::shared_ptr<Order> order, const std:
     } else {
         order->status = OrderStatus::REJECTED;
         std::cout << "Stop loss order " << order->id << " rejected: no liquidity available" << std::endl;
+    }
+}
+
+void OrderBook::update_trailing_stop_price(std::shared_ptr<Order> order) {
+    if (order->type != OrderType::TRAILING_STOP) {
+        return;
+    }
+    
+    if (order->side == OrderSide::SELL) {
+        // For SELL trailing stops, track the highest price and set stop below it
+        if (last_trade_price > order->highest_price) {
+            order->highest_price = last_trade_price;
+            order->price = last_trade_price - order->trailing_amount;
+            std::cout << "Trailing stop " << order->id << " updated: highest=" << order->highest_price 
+                      << ", stop=" << order->price << std::endl;
+        }
+    } else if (order->side == OrderSide::BUY) {
+        // For BUY trailing stops, track the lowest price and set stop above it
+        if (last_trade_price < order->lowest_price || order->lowest_price == 0.0) {
+            order->lowest_price = last_trade_price;
+            order->price = last_trade_price + order->trailing_amount;
+            std::cout << "Trailing stop " << order->id << " updated: lowest=" << order->lowest_price 
+                      << ", stop=" << order->price << std::endl;
+        }
     }
 }
