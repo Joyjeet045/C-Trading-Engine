@@ -5,9 +5,9 @@
 #include <vector>
 #include <string>
 #include <mutex>
-#include "../src/server/MatchingEngine.h"
-#include "../src/common/Order.h"
-#include "../src/common/OrderBook.h"
+#include "src/server/MatchingEngine.h"
+#include "src/common/Order.h"
+#include "src/common/OrderBook.h"
 
 class TradingEngineTest {
 private:
@@ -127,9 +127,8 @@ public:
         
         book = engine.get_order_book("GOOGL");
         assert(book != nullptr);
-        assert(book->get_best_ask() == 0.0); // All sell liquidity consumed by market buy order
-        assert(book->get_best_bid() == 2500.0); // Buy side still has 70 shares remaining (100 - 30)
-        // The partially filled market buy order is not kept in the order book (your implementation behavior)
+        assert(book->get_best_ask() == 0.0); 
+        assert(book->get_best_bid() == 2500.0); 
         
         std::cout << "✓ Market order execution test passed" << std::endl;
     }
@@ -158,7 +157,7 @@ public:
         book = engine.get_order_book("TSLA");
         assert(book != nullptr);
         double last_price = book->get_last_price();
-        assert(last_price == 800.0); // Last trade was the stop loss execution at 800.0
+        assert(last_price == 800.0); 
         
         assert(book->get_best_bid() == 800.0);
         assert(book->get_best_ask() == 810.0);
@@ -433,7 +432,6 @@ public:
     void test_order_status_transitions() {
         std::cout << "\n--- Testing Order Status Transitions ---" << std::endl;
         
-        // Test PENDING -> FILLED transition with exact matching orders
         engine.submit_order("META", OrderType::LIMIT, OrderSide::SELL, 2500.0, 50, "seller");
         uint64_t buy_order = engine.submit_order("META", OrderType::LIMIT, OrderSide::BUY, 2500.0, 50, "buyer");
         
@@ -441,7 +439,6 @@ public:
         
         auto book = engine.get_order_book("META");
         assert(book != nullptr);
-        // Both orders should be fully filled and removed from order book
         assert(book->get_best_bid() == 0.0);
         assert(book->get_best_ask() == 0.0);
         assert(book->get_last_price() > 0.0);

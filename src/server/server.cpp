@@ -9,6 +9,7 @@
 #include <cstring>
 #include <unordered_map>
 #include <mutex>
+#include <chrono>
 
 class TradingServer {
 private:
@@ -216,6 +217,77 @@ public:
             
             uint64_t order_id = engine.submit_trailing_stop_order(symbol, side, trailing_amount, quantity, client_id);
             return "ORDER_ID:" + std::to_string(order_id) + "\n";
+        }
+        else if (command == "VWAP_ORDER") {
+            if (authenticated_client_id.empty()) {
+                return "ERROR:Not authenticated. Please LOGIN first.\n";
+            }
+            
+            std::string symbol, side_str, client_id;
+            double target_vwap, quantity;
+            int duration_minutes;
+            iss >> symbol >> side_str >> target_vwap >> quantity >> duration_minutes >> client_id;
+            
+            if (client_id != authenticated_client_id) {
+                return "ERROR:Client ID mismatch. You can only place orders for your own account.\n";
+            }
+            
+            if (target_vwap <= 0 || quantity <= 0 || duration_minutes <= 0) {
+                return "ERROR:Invalid VWAP parameters. Price, quantity, and duration must be positive.\n";
+            }
+            
+            if (duration_minutes > 480) {
+                return "ERROR:Duration cannot exceed 8 hours (480 minutes).\n";
+            }
+            
+            OrderSide side = (side_str == "BUY") ? OrderSide::BUY : OrderSide::SELL;
+            
+            // Calculate start and end times
+            auto now = std::chrono::steady_clock::now();
+            auto start_time = now + std::chrono::seconds(1); // Start in 1 second
+            auto end_time = now + std::chrono::minutes(duration_minutes);
+            
+            uint64_t order_id = engine.submit_vwap_order(symbol, side, target_vwap, quantity, start_time, end_time, client_id);
+            
+            if (order_id > 0) {
+                return "VWAP_ORDER_ID:" + std::to_string(order_id) + "\n";
+            } else {
+                return "VWAP_ORDER_FAILED:Invalid parameters or insufficient liquidity\n";
+            }
+        }
+        else if (command == "VWAP_STATUS") {
+            if (authenticated_client_id.empty()) {
+                return "ERROR:Not authenticated. Please LOGIN first.\n";
+            }
+            
+            std::string symbol, client_id;
+            iss >> symbol >> client_id;
+            
+            if (client_id != authenticated_client_id) {
+                return "ERROR:Client ID mismatch. You can only check your own orders.\n";
+            }
+            
+            auto active_vwap_orders = engine.get_active_vwap_orders();
+            std::string response = "VWAP_STATUS:";
+            
+            bool found_orders = false;
+            for (const auto& order : active_vwap_orders) {
+                if (order->symbol == symbol && order->client_id == client_id) {
+                    if (found_orders) response += "|";
+                    response += "ID:" + std::to_string(order->id) + 
+                               " SIDE:" + (order->side == OrderSide::BUY ? "BUY" : "SELL") +
+                               " TARGET:" + std::to_string(order->target_vwap) +
+                               " PROGRESS:" + std::to_string(order->filled_quantity) + "/" + std::to_string(order->quantity) +
+                               " STATUS:" + std::to_string((int)order->status);
+                    found_orders = true;
+                }
+            }
+            
+            if (!found_orders) {
+                response += "NO_ACTIVE_VWAP_ORDERS";
+            }
+            
+            return response + "\n";
         }
         else if (command == "CANCEL") {
             if (authenticated_client_id.empty()) {

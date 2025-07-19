@@ -74,7 +74,7 @@ public:
         std::string input;
         
         while (true) {
-            std::cout << "\nCommands: ORDER, STOP_LIMIT_ORDER, TRAILING_STOP_ORDER, CANCEL, BOOK, LOGOUT, QUIT" << std::endl;
+            std::cout << "\nCommands: ORDER, STOP_LIMIT_ORDER, TRAILING_STOP_ORDER, VWAP_ORDER, VWAP_STATUS, CANCEL, BOOK, LOGOUT, QUIT" << std::endl;
             std::cout << "Enter command: ";
             std::getline(std::cin, input);
             
@@ -89,6 +89,10 @@ public:
                 place_stop_limit_order();
             } else if (input == "TRAILING_STOP_ORDER") {
                 place_trailing_stop_order();
+            } else if (input == "VWAP_ORDER") {
+                place_vwap_order();
+            } else if (input == "VWAP_STATUS") {
+                get_vwap_status();
             } else if (input == "CANCEL") {
                 cancel_order();
             } else if (input == "BOOK") {
@@ -148,7 +152,7 @@ public:
         std::cin >> limit_price;
         std::cout << "Quantity: ";
         std::cin >> quantity;
-        std::cin.ignore(); // Clear input buffer
+        std::cin.ignore();
         
         std::string message = "STOP_LIMIT_ORDER " + symbol + " " + side + " " + 
                              std::to_string(stop_price) + " " + std::to_string(limit_price) + " " + 
@@ -174,12 +178,141 @@ public:
         std::cin >> trailing_amount;
         std::cout << "Quantity: ";
         std::cin >> quantity;
-        std::cin.ignore(); // Clear input buffer
+        std::cin.ignore(); 
         
         std::string message = "TRAILING_STOP_ORDER " + symbol + " " + side + " " + 
                              std::to_string(trailing_amount) + " " + std::to_string(quantity) + " " + client_id;
         
         send_message(message);
+    }
+    
+    void place_vwap_order() {
+        if (!authenticated) {
+            std::cout << "Not authenticated. Please login first." << std::endl;
+            return;
+        }
+        
+        std::string symbol, side;
+        double target_vwap, quantity;
+        int duration_minutes;
+        
+        std::cout << "=== VWAP Order ===" << std::endl;
+        std::cout << "VWAP orders execute over time to achieve the target average price." << std::endl;
+        std::cout << "Symbol: ";
+        std::cin >> symbol;
+        std::cout << "Side (BUY/SELL): ";
+        std::cin >> side;
+        std::cout << "Target VWAP Price: ";
+        std::cin >> target_vwap;
+        std::cout << "Total Quantity: ";
+        std::cin >> quantity;
+        std::cout << "Duration (minutes): ";
+        std::cin >> duration_minutes;
+        std::cin.ignore();
+        
+        // Validate inputs
+        if (target_vwap <= 0 || quantity <= 0 || duration_minutes <= 0) {
+            std::cout << "Error: Invalid parameters. Price, quantity, and duration must be positive." << std::endl;
+            return;
+        }
+        
+        if (duration_minutes > 480) { // 8 hours max
+            std::cout << "Error: Duration cannot exceed 8 hours (480 minutes)." << std::endl;
+            return;
+        }
+        
+        std::string message = "VWAP_ORDER " + symbol + " " + side + " " + 
+                             std::to_string(target_vwap) + " " + std::to_string(quantity) + " " + 
+                             std::to_string(duration_minutes) + " " + client_id;
+        
+        std::cout << "Submitting VWAP order..." << std::endl;
+        std::string response = send_message(message);
+        
+        if (response.find("VWAP_ORDER_ID:") == 0) {
+            std::string order_id = response.substr(14); // Remove "VWAP_ORDER_ID:"
+            if (!order_id.empty() && order_id.back() == '\n') {
+                order_id.pop_back();
+            }
+            std::cout << "✓ VWAP order submitted successfully!" << std::endl;
+            std::cout << "  Order ID: " << order_id << std::endl;
+            std::cout << "  Symbol: " << symbol << std::endl;
+            std::cout << "  Side: " << side << std::endl;
+            std::cout << "  Target VWAP: $" << target_vwap << std::endl;
+            std::cout << "  Quantity: " << quantity << std::endl;
+            std::cout << "  Duration: " << duration_minutes << " minutes" << std::endl;
+            std::cout << "  Use VWAP_STATUS to monitor progress" << std::endl;
+        } else {
+            std::cout << "✗ VWAP order failed: " << response << std::endl;
+        }
+    }
+    
+    void get_vwap_status() {
+        if (!authenticated) {
+            std::cout << "Not authenticated. Please login first." << std::endl;
+            return;
+        }
+        
+        std::string symbol;
+        std::cout << "Symbol: ";
+        std::cin >> symbol;
+        std::cin.ignore();
+        
+        std::string message = "VWAP_STATUS " + symbol + " " + client_id;
+        std::string response = send_message(message);
+        
+        // Parse and display VWAP status response
+        if (response.find("VWAP_STATUS:") == 0) {
+            std::string status_data = response.substr(12); // Remove "VWAP_STATUS:"
+            
+            if (status_data.find("NO_ACTIVE_VWAP_ORDERS") != std::string::npos) {
+                std::cout << "No active VWAP orders found for " << symbol << std::endl;
+            } else {
+                std::cout << "\n=== VWAP Orders for " << symbol << " ===" << std::endl;
+                
+                // Parse multiple orders separated by "|"
+                size_t pos = 0;
+                while ((pos = status_data.find("|")) != std::string::npos) {
+                    std::string order_info = status_data.substr(0, pos);
+                    display_vwap_order_info(order_info);
+                    status_data.erase(0, pos + 1);
+                }
+                
+                // Display the last order
+                if (!status_data.empty()) {
+                    display_vwap_order_info(status_data);
+                }
+            }
+        } else {
+            std::cout << "Error getting VWAP status: " << response << std::endl;
+        }
+    }
+    
+    void display_vwap_order_info(const std::string& order_info) {
+        std::cout << "Order Info: " << order_info << std::endl;
+        
+        // Parse individual fields
+        std::istringstream iss(order_info);
+        std::string field;
+        
+        while (iss >> field) {
+            if (field.find("ID:") == 0) {
+                std::cout << "  Order ID: " << field.substr(3) << std::endl;
+            } else if (field.find("SIDE:") == 0) {
+                std::cout << "  Side: " << field.substr(5) << std::endl;
+            } else if (field.find("TARGET:") == 0) {
+                std::cout << "  Target VWAP: $" << field.substr(7) << std::endl;
+            } else if (field.find("PROGRESS:") == 0) {
+                std::cout << "  Progress: " << field.substr(9) << std::endl;
+            } else if (field.find("STATUS:") == 0) {
+                int status = std::stoi(field.substr(7));
+                std::string status_str = (status == 0) ? "PENDING" : 
+                                       (status == 1) ? "PARTIAL_FILLED" : 
+                                       (status == 2) ? "FILLED" : 
+                                       (status == 3) ? "CANCELLED" : "UNKNOWN";
+                std::cout << "  Status: " << status_str << std::endl;
+            }
+        }
+        std::cout << std::endl;
     }
     
     void cancel_order() {
@@ -191,7 +324,7 @@ public:
         uint64_t order_id;
         std::cout << "Order ID to cancel: ";
         std::cin >> order_id;
-        std::cin.ignore(); // Clear input buffer
+        std::cin.ignore(); 
         
         std::string message = "CANCEL " + std::to_string(order_id) + " " + client_id;
         send_message(message);
@@ -201,12 +334,12 @@ public:
         std::string symbol;
         std::cout << "Symbol: ";
         std::cin >> symbol;
-        std::cin.ignore(); // Clear input buffer
+        std::cin.ignore();
         
         std::string message = "BOOK " + symbol;
         send_message(message);
     }
-    
+
     std::string send_message(const std::string& message) {
         std::cout << "DEBUG: Sending message: [" << message << "]" << std::endl;
         send(sock_fd, message.c_str(), message.length(), 0);
@@ -236,7 +369,7 @@ int main() {
     std::string client_id;
     std::cout << "Enter client ID: ";
     std::cin >> client_id;
-    std::cin.ignore(); // Clear newline
+    std::cin.ignore(); 
     
     TradingClient client(client_id);
     if (!client.connect_to_server()) {
