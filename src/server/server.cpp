@@ -80,6 +80,11 @@ public:
                 size_t pos = response.find(":");
                 if (pos != std::string::npos) {
                     authenticated_client_id = response.substr(pos + 1);
+                    // Remove trailing newline if present
+                    if (!authenticated_client_id.empty() && authenticated_client_id.back() == '\n') {
+                        authenticated_client_id.pop_back();
+                    }
+                    std::cout << "DEBUG: Stored authenticated_client_id: [" << authenticated_client_id << "]" << std::endl;
                 }
             }
             
@@ -149,6 +154,8 @@ public:
             std::string symbol, type_str, side_str, client_id;
             double price, quantity;
             iss >> symbol >> type_str >> side_str >> price >> quantity >> client_id;
+            
+            std::cout << "DEBUG: Received client_id: [" << client_id << "], authenticated_client_id: [" << authenticated_client_id << "]" << std::endl;
             
             if (client_id != authenticated_client_id) {
                 return "ERROR:Client ID mismatch. You can only place orders for your own account.\n";
