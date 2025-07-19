@@ -140,6 +140,16 @@ double OrderBook::get_best_ask() const {
     return sell_orders.empty() ? 0.0 : sell_orders.begin()->first;
 }
 
+double OrderBook::get_last_price() const {
+    std::lock_guard<std::mutex> lock(book_mutex);
+    return last_trade_price;
+}
+
+void OrderBook::set_trade_callback(TradeCallback callback) {
+    std::lock_guard<std::mutex> lock(book_mutex);
+    trade_callback = callback;
+}
+
 bool OrderBook::execute_trade(std::shared_ptr<Order> buy_order, std::shared_ptr<Order> sell_order) {
     double trade_quantity = std::min(buy_order->quantity - buy_order->filled_quantity,
                                    sell_order->quantity - sell_order->filled_quantity);
@@ -172,6 +182,11 @@ bool OrderBook::execute_trade(std::shared_ptr<Order> buy_order, std::shared_ptr<
     
     last_trade_price = trade_price;
     
+    // Notify VWAP calculator about the trade
+    if (trade_callback) {
+        trade_callback(symbol, trade_price, trade_quantity);
+    }
+    
     std::cout << "Trade executed: " << trade_quantity << " @ " << trade_price 
               << " between " << buy_order->client_id << " and " << sell_order->client_id << std::endl;
     
@@ -180,6 +195,11 @@ bool OrderBook::execute_trade(std::shared_ptr<Order> buy_order, std::shared_ptr<
 
 double OrderBook::execute_market_order(std::shared_ptr<Order> market_order, OrderSide opposite_side, double max_quantity) {
     std::lock_guard<std::mutex> lock(book_mutex);
+    return execute_market_order_internal(market_order, opposite_side, max_quantity);
+}
+
+double OrderBook::execute_market_order_internal(std::shared_ptr<Order> market_order, OrderSide opposite_side, double max_quantity) {
+    // Note: This function assumes the caller already holds the book_mutex
     
     double total_executed = 0.0;
     auto& opposite_orders = (opposite_side == OrderSide::BUY) ? buy_orders : sell_orders;
@@ -276,7 +296,7 @@ void OrderBook::execute_stop_loss_order(std::shared_ptr<Order> order, const std:
     if (order->type == OrderType::STOP_LOSS) {
         // Convert to market order and execute immediately
         order->type = OrderType::MARKET;
-        executed_quantity = execute_market_order(order, 
+        executed_quantity = execute_market_order_internal(order, 
             (order->side == OrderSide::BUY) ? OrderSide::SELL : OrderSide::BUY, 
             order->quantity);
     } else if (order->type == OrderType::STOP_LIMIT) {
@@ -295,7 +315,7 @@ void OrderBook::execute_stop_loss_order(std::shared_ptr<Order> order, const std:
     } else if (order->type == OrderType::TRAILING_STOP) {
         // Convert to market order and execute immediately
         order->type = OrderType::MARKET;
-        executed_quantity = execute_market_order(order, 
+        executed_quantity = execute_market_order_internal(order, 
             (order->side == OrderSide::BUY) ? OrderSide::SELL : OrderSide::BUY, 
             order->quantity);
     }

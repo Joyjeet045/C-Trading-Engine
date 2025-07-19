@@ -121,6 +121,7 @@ public:
         std::cin >> price;
         std::cout << "Quantity: ";
         std::cin >> quantity;
+        std::cin.ignore(); // Clear input buffer
         
         std::string message = "ORDER " + symbol + " " + type + " " + side + " " + 
                              std::to_string(price) + " " + std::to_string(quantity) + " " + client_id;
@@ -147,6 +148,7 @@ public:
         std::cin >> limit_price;
         std::cout << "Quantity: ";
         std::cin >> quantity;
+        std::cin.ignore(); // Clear input buffer
         
         std::string message = "STOP_LIMIT_ORDER " + symbol + " " + side + " " + 
                              std::to_string(stop_price) + " " + std::to_string(limit_price) + " " + 
@@ -172,6 +174,7 @@ public:
         std::cin >> trailing_amount;
         std::cout << "Quantity: ";
         std::cin >> quantity;
+        std::cin.ignore(); // Clear input buffer
         
         std::string message = "TRAILING_STOP_ORDER " + symbol + " " + side + " " + 
                              std::to_string(trailing_amount) + " " + std::to_string(quantity) + " " + client_id;
@@ -188,6 +191,7 @@ public:
         uint64_t order_id;
         std::cout << "Order ID to cancel: ";
         std::cin >> order_id;
+        std::cin.ignore(); // Clear input buffer
         
         std::string message = "CANCEL " + std::to_string(order_id) + " " + client_id;
         send_message(message);
@@ -197,12 +201,14 @@ public:
         std::string symbol;
         std::cout << "Symbol: ";
         std::cin >> symbol;
+        std::cin.ignore(); // Clear input buffer
         
         std::string message = "BOOK " + symbol;
         send_message(message);
     }
     
     std::string send_message(const std::string& message) {
+        std::cout << "DEBUG: Sending message: [" << message << "]" << std::endl;
         send(sock_fd, message.c_str(), message.length(), 0);
         
         char buffer[1024];

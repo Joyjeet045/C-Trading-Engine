@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -pthread
+CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -pthread -I.
 
 SRCDIR = src
 OBJDIR = obj
@@ -52,6 +52,10 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 $(OBJDIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(OBJDIR)/test_trading_engine.o: test_trading_engine.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -DTEST_BUILD -c -o $@ $<
 
 clean:
 	rm -rf $(OBJDIR) $(BINDIR)
