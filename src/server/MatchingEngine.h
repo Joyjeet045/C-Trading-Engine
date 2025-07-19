@@ -11,7 +11,7 @@
 class MatchingEngine {
 private:
     std::unordered_map<std::string, std::shared_ptr<OrderBook>> order_books;
-    std::unordered_map<std::string, std::vector<uint64_t>> client_orders; 
+    std::unordered_map<std::string, std::vector<uint64_t>> client_orders;
     std::unordered_map<std::string, std::shared_ptr<VWAPCalculator>> vwap_calculators;
     std::unordered_map<uint64_t, std::shared_ptr<Order>> vwap_orders;
     std::atomic<uint64_t> next_order_id;
@@ -42,7 +42,6 @@ public:
     
     std::shared_ptr<OrderBook> get_order_book(const std::string& symbol);
     
-    // VWAP-specific methods
     std::shared_ptr<Order> get_vwap_order(uint64_t order_id);
     std::vector<std::shared_ptr<Order>> get_active_vwap_orders();
     

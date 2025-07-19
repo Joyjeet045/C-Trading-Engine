@@ -9,7 +9,7 @@ BINDIR = bin
 $(shell mkdir -p $(OBJDIR) $(BINDIR))
 
 # Server
-SERVER_SOURCES = $(SRCDIR)/server/server.cpp $(SRCDIR)/server/MatchingEngine.cpp $(SRCDIR)/common/OrderBook.cpp
+SERVER_SOURCES = $(SRCDIR)/server/server.cpp $(SRCDIR)/server/MatchingEngine.cpp $(SRCDIR)/common/OrderBook.cpp $(SRCDIR)/common/VWAPCalculator.cpp
 SERVER_OBJECTS = $(SERVER_SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
 SERVER_TARGET = $(BINDIR)/server
 
@@ -19,7 +19,7 @@ CLIENT_OBJECTS = $(CLIENT_SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
 CLIENT_TARGET = $(BINDIR)/client
 
 # Test
-TEST_SOURCES = test_trading_engine.cpp $(SRCDIR)/server/MatchingEngine.cpp $(SRCDIR)/common/OrderBook.cpp
+TEST_SOURCES = test_trading_engine.cpp $(SRCDIR)/server/MatchingEngine.cpp $(SRCDIR)/common/OrderBook.cpp $(SRCDIR)/common/VWAPCalculator.cpp
 TEST_OBJECTS = $(TEST_SOURCES:%.cpp=$(OBJDIR)/%.o)
 TEST_TARGET = $(BINDIR)/test_engine
 

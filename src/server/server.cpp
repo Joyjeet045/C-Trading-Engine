@@ -16,7 +16,7 @@ private:
     MatchingEngine engine;
     int server_fd;
     static const int PORT = 8080;
-    std::unordered_map<std::string, int> active_sessions; // client_id -> client_fd
+    std::unordered_map<std::string, int> active_sessions;
     std::mutex sessions_mutex;
     
 public:
@@ -81,7 +81,6 @@ public:
                 size_t pos = response.find(":");
                 if (pos != std::string::npos) {
                     authenticated_client_id = response.substr(pos + 1);
-                    // Remove trailing newline if present
                     if (!authenticated_client_id.empty() && authenticated_client_id.back() == '\n') {
                         authenticated_client_id.pop_back();
                     }
@@ -103,7 +102,7 @@ public:
         
         auto it = active_sessions.find(client_id);
         if (it != active_sessions.end()) {
-            return false; // Client ID already in use
+            return false;
         }
         
         active_sessions[client_id] = client_fd;
@@ -242,9 +241,8 @@ public:
             
             OrderSide side = (side_str == "BUY") ? OrderSide::BUY : OrderSide::SELL;
             
-            // Calculate start and end times
             auto now = std::chrono::steady_clock::now();
-            auto start_time = now + std::chrono::seconds(1); // Start in 1 second
+            auto start_time = now + std::chrono::seconds(1);
             auto end_time = now + std::chrono::minutes(duration_minutes);
             
             uint64_t order_id = engine.submit_vwap_order(symbol, side, target_vwap, quantity, start_time, end_time, client_id);
