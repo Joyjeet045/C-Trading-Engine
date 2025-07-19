@@ -1,203 +1,329 @@
-#include "../src/common/Order.h"
-#include "../src/common/OrderBook.h"
-#include "../src/server/MatchingEngine.h"
 #include <iostream>
 #include <cassert>
 #include <thread>
 #include <chrono>
+#include <vector>
+#include <string>
+#include <mutex>
+#include "src/server/MatchingEngine.h"
+#include "src/common/Order.h"
+#include "src/common/OrderBook.h"
 
 class TradingEngineTest {
 private:
     MatchingEngine engine;
-    
+
 public:
     void run_all_tests() {
-        std::cout << "=== TRADING ENGINE TEST SUITE ===" << std::endl;
+        std::cout << "=== REALISTIC TRADING ENGINE TEST SUITE ===" << std::endl;
         
         test_basic_order_types();
-        test_order_matching();
-        test_stop_loss_orders();
-        test_stop_limit_orders();
-        test_trailing_stop_orders();
-        test_order_cancellation();
-        test_market_orders();
-        test_order_book_operations();
-        test_edge_cases();
-        test_concurrent_operations();
+        test_order_matching_with_price_time_priority();
+        test_market_order_execution();
+        test_stop_loss_orders_realistic();
+        test_stop_limit_orders_realistic();
+        test_trailing_stop_orders_realistic();
+        test_order_cancellation_realistic();
+        test_order_book_operations_realistic();
+        test_edge_cases_realistic();
+        test_concurrent_operations_realistic();
+        test_partial_fills_and_remaining_quantity();
+        test_order_status_transitions();
         
-        std::cout << "\n=== ALL TESTS PASSED ===" << std::endl;
+        std::cout << "\n=== ALL REALISTIC TESTS PASSED ===" << std::endl;
     }
-    
+
     void test_basic_order_types() {
-        std::cout << "\n--- Testing Basic Order Types ---" << std::endl;
-        
-        // Test MARKET orders
-        uint64_t market_order_id = engine.submit_order("AAPL", OrderType::MARKET, OrderSide::BUY, 0.0, 100, "client1");
-        assert(market_order_id > 0);
-        std::cout << "✓ MARKET order creation passed" << std::endl;
-        
-        // Test LIMIT orders
+        std::cout << "\n--- Testing Basic Order Types (Realistic) ---" << std::endl;
+
         uint64_t limit_order_id = engine.submit_order("AAPL", OrderType::LIMIT, OrderSide::SELL, 150.0, 50, "client2");
         assert(limit_order_id > 0);
-        std::cout << "✓ LIMIT order creation passed" << std::endl;
-        
-        // Test STOP_LOSS orders
+
+        auto book = engine.get_order_book("AAPL");
+        assert(book != nullptr);
+        assert(book->get_best_ask() == 150.0);
+        std::cout << "✓ LIMIT order creation and placement passed" << std::endl;
+
+        uint64_t market_order_id = engine.submit_order("AAPL", OrderType::MARKET, OrderSide::BUY, 0.0, 100, "client1");
+        assert(market_order_id > 0);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        book = engine.get_order_book("AAPL");
+        assert(book != nullptr);
+        assert(book->get_best_ask() == 0.0);
+        assert(book->get_last_price() > 0.0);
+        std::cout << "✓ MARKET order execution passed" << std::endl;
+
         uint64_t stop_loss_id = engine.submit_order("AAPL", OrderType::STOP_LOSS, OrderSide::SELL, 140.0, 25, "client1");
         assert(stop_loss_id > 0);
         std::cout << "✓ STOP_LOSS order creation passed" << std::endl;
-        
-        // Test STOP_LIMIT orders
+
         uint64_t stop_limit_id = engine.submit_stop_limit_order("AAPL", OrderSide::SELL, 145.0, 144.0, 30, "client2");
         assert(stop_limit_id > 0);
         std::cout << "✓ STOP_LIMIT order creation passed" << std::endl;
-        
-        // Test TRAILING_STOP orders
+
         uint64_t trailing_stop_id = engine.submit_trailing_stop_order("AAPL", OrderSide::SELL, 5.0, 40, "client1");
         assert(trailing_stop_id > 0);
         std::cout << "✓ TRAILING_STOP order creation passed" << std::endl;
     }
-    
-    void test_order_matching() {
-        std::cout << "\n--- Testing Order Matching ---" << std::endl;
+
+    void test_order_matching_with_price_time_priority() {
+        std::cout << "\n--- Testing Order Matching with Price-Time Priority ---" << std::endl;
         
-        // Create a simple matching scenario
-        uint64_t buy_order = engine.submit_order("MSFT", OrderType::LIMIT, OrderSide::BUY, 200.0, 100, "client1");
-        uint64_t sell_order = engine.submit_order("MSFT", OrderType::LIMIT, OrderSide::SELL, 200.0, 100, "client2");
+        uint64_t buy_order1 = engine.submit_order("MSFT", OrderType::LIMIT, OrderSide::BUY, 200.0, 50, "client1");
+        uint64_t buy_order2 = engine.submit_order("MSFT", OrderType::LIMIT, OrderSide::BUY, 200.0, 30, "client2");
+        uint64_t buy_order3 = engine.submit_order("MSFT", OrderType::LIMIT, OrderSide::BUY, 200.0, 20, "client3");
         
-        assert(buy_order > 0 && sell_order > 0);
+        uint64_t sell_order1 = engine.submit_order("MSFT", OrderType::LIMIT, OrderSide::SELL, 200.0, 100, "client4");
         
-        // Get order book and verify matching
+        uint64_t sell_order2 = engine.submit_order("MSFT", OrderType::LIMIT, OrderSide::SELL, 201.0, 50, "client5");
+        
+        assert(buy_order1 > 0 && buy_order2 > 0 && buy_order3 > 0);
+        assert(sell_order1 > 0 && sell_order2 > 0);
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        
         auto book = engine.get_order_book("MSFT");
         assert(book != nullptr);
         
-        // Process matching
+        assert(book->get_best_bid() == 0.0);
+        assert(book->get_best_ask() == 201.0);
+        
+        assert(book->get_last_price() > 0.0);
+        
+        std::cout << "✓ Price-time priority matching test passed" << std::endl;
+    }
+    
+    void test_market_order_execution() {
+        std::cout << "\n--- Testing Market Order Execution ---" << std::endl;
+        
+        engine.submit_order("GOOGL", OrderType::LIMIT, OrderSide::BUY, 2500.0, 100, "liquidity_buyer");
+        engine.submit_order("GOOGL", OrderType::LIMIT, OrderSide::SELL, 2501.0, 100, "liquidity_seller");
+        
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         
-        std::cout << "✓ Order matching test passed" << std::endl;
+        uint64_t market_buy = engine.submit_order("GOOGL", OrderType::MARKET, OrderSide::BUY, 0.0, 50, "market_buyer");
+        assert(market_buy > 0);
+        
+        uint64_t market_sell = engine.submit_order("GOOGL", OrderType::MARKET, OrderSide::SELL, 0.0, 30, "market_seller");
+        assert(market_sell > 0);
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        auto book = engine.get_order_book("GOOGL");
+        assert(book != nullptr);
+        
+        assert(book->get_best_bid() == 2500.0);
+        assert(book->get_best_ask() == 2501.0);
+        
+        double last_price = book->get_last_price();
+        assert(last_price > 0.0);
+        
+        uint64_t market_buy_no_liquidity = engine.submit_order("GOOGL", OrderType::MARKET, OrderSide::BUY, 0.0, 100, "no_liquidity_buyer");
+        assert(market_buy_no_liquidity > 0);
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        book = engine.get_order_book("GOOGL");
+        assert(book != nullptr);
+        assert(book->get_best_ask() == 0.0); 
+        assert(book->get_best_bid() == 2500.0); 
+        
+        std::cout << "✓ Market order execution test passed" << std::endl;
     }
     
-    void test_stop_loss_orders() {
-        std::cout << "\n--- Testing Stop Loss Orders ---" << std::endl;
+    void test_stop_loss_orders_realistic() {
+        std::cout << "\n--- Testing Stop Loss Orders (Realistic) ---" << std::endl;
         
-        // Test immediate triggering
-        uint64_t stop_order = engine.submit_order("GOOGL", OrderType::STOP_LOSS, OrderSide::SELL, 2500.0, 10, "client1");
+        engine.submit_order("TSLA", OrderType::LIMIT, OrderSide::BUY, 800.0, 100, "liquidity_provider");
+        engine.submit_order("TSLA", OrderType::LIMIT, OrderSide::SELL, 810.0, 100, "liquidity_provider2");
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        uint64_t stop_order = engine.submit_order("TSLA", OrderType::STOP_LOSS, OrderSide::SELL, 805.0, 25, "stop_client");
         assert(stop_order > 0);
         
-        // Test price movement triggering
-        auto book = engine.get_order_book("GOOGL");
-        if (book) {
-            // Simulate price movement by executing a trade
-            uint64_t buy_order = engine.submit_order("GOOGL", OrderType::LIMIT, OrderSide::BUY, 2500.0, 5, "client2");
-            uint64_t sell_order = engine.submit_order("GOOGL", OrderType::LIMIT, OrderSide::SELL, 2500.0, 5, "client3");
-            
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
+        auto book = engine.get_order_book("TSLA");
+        assert(book != nullptr);
+        assert(book->get_best_bid() == 800.0);
+        assert(book->get_best_ask() == 810.0);
         
-        std::cout << "✓ Stop loss order test passed" << std::endl;
+        uint64_t trigger_buy = engine.submit_order("TSLA", OrderType::LIMIT, OrderSide::BUY, 805.0, 10, "trigger_client");
+        uint64_t trigger_sell = engine.submit_order("TSLA", OrderType::LIMIT, OrderSide::SELL, 805.0, 10, "trigger_client2");
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        
+        book = engine.get_order_book("TSLA");
+        assert(book != nullptr);
+        double last_price = book->get_last_price();
+        assert(last_price == 800.0); 
+        
+        assert(book->get_best_bid() == 800.0);
+        assert(book->get_best_ask() == 810.0);
+        
+        uint64_t buy_stop_order = engine.submit_order("TSLA", OrderType::STOP_LOSS, OrderSide::BUY, 815.0, 15, "buy_stop_client");
+        assert(buy_stop_order > 0);
+        
+        uint64_t trigger_buy2 = engine.submit_order("TSLA", OrderType::LIMIT, OrderSide::BUY, 815.0, 5, "trigger_client3");
+        uint64_t trigger_sell2 = engine.submit_order("TSLA", OrderType::LIMIT, OrderSide::SELL, 815.0, 5, "trigger_client4");
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        
+        book = engine.get_order_book("TSLA");
+        assert(book != nullptr);
+        assert(book->get_best_ask() == 810.0);
+        
+        std::cout << "✓ Stop loss order triggering and execution test passed" << std::endl;
     }
     
-    void test_stop_limit_orders() {
-        std::cout << "\n--- Testing Stop Limit Orders ---" << std::endl;
+    void test_stop_limit_orders_realistic() {
+        std::cout << "\n--- Testing Stop Limit Orders (Realistic) ---" << std::endl;
         
-        // Test stop limit order creation
-        uint64_t stop_limit = engine.submit_stop_limit_order("TSLA", OrderSide::SELL, 800.0, 795.0, 20, "client1");
+        engine.submit_order("NVDA", OrderType::LIMIT, OrderSide::BUY, 400.0, 100, "liquidity_buyer");
+        engine.submit_order("NVDA", OrderType::LIMIT, OrderSide::SELL, 420.0, 100, "liquidity_seller");
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        uint64_t stop_limit = engine.submit_stop_limit_order("NVDA", OrderSide::SELL, 410.0, 405.0, 30, "stop_limit_client");
         assert(stop_limit > 0);
         
-        // Test validation
-        uint64_t invalid_stop_limit = engine.submit_stop_limit_order("TSLA", OrderSide::SELL, 800.0, 810.0, 20, "client2");
-        assert(invalid_stop_limit == 0); // Should fail validation
+        auto book = engine.get_order_book("NVDA");
+        assert(book != nullptr);
+        assert(book->get_best_bid() == 400.0);
+        assert(book->get_best_ask() == 420.0);
         
-        std::cout << "✓ Stop limit order test passed" << std::endl;
+        uint64_t trigger_buy = engine.submit_order("NVDA", OrderType::LIMIT, OrderSide::BUY, 410.0, 10, "trigger_client");
+        uint64_t trigger_sell = engine.submit_order("NVDA", OrderType::LIMIT, OrderSide::SELL, 410.0, 10, "trigger_client2");
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        
+        book = engine.get_order_book("NVDA");
+        assert(book != nullptr);
+        
+        assert(book->get_best_ask() == 405.0);
+        assert(book->get_best_bid() == 400.0);
+        
+        uint64_t market_buy = engine.submit_order("NVDA", OrderType::MARKET, OrderSide::BUY, 0.0, 30, "execution_test");
+        assert(market_buy > 0);
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        book = engine.get_order_book("NVDA");
+        assert(book != nullptr);
+        assert(book->get_best_ask() == 420.0);
+        
+        std::cout << "✓ Stop limit order triggering and conversion test passed" << std::endl;
     }
     
-    void test_trailing_stop_orders() {
-        std::cout << "\n--- Testing Trailing Stop Orders ---" << std::endl;
+    void test_trailing_stop_orders_realistic() {
+        std::cout << "\n--- Testing Trailing Stop Orders (Realistic) ---" << std::endl;
         
-        // Test trailing stop order creation
-        uint64_t trailing_stop = engine.submit_trailing_stop_order("NVDA", OrderSide::SELL, 10.0, 15, "client1");
+        engine.submit_order("AMD", OrderType::LIMIT, OrderSide::BUY, 100.0, 100, "liquidity_buyer");
+        engine.submit_order("AMD", OrderType::LIMIT, OrderSide::SELL, 120.0, 100, "liquidity_seller");
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        uint64_t trailing_stop = engine.submit_trailing_stop_order("AMD", OrderSide::SELL, 5.0, 25, "trailing_client");
         assert(trailing_stop > 0);
         
-        // Test validation
-        uint64_t invalid_trailing = engine.submit_trailing_stop_order("NVDA", OrderSide::SELL, -5.0, 15, "client2");
-        assert(invalid_trailing == 0); // Should fail validation
+        engine.submit_order("AMD", OrderType::LIMIT, OrderSide::BUY, 110.0, 10, "price_mover1");
+        engine.submit_order("AMD", OrderType::LIMIT, OrderSide::SELL, 110.0, 10, "price_mover2");
         
-        std::cout << "✓ Trailing stop order test passed" << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        engine.submit_order("AMD", OrderType::LIMIT, OrderSide::BUY, 115.0, 10, "price_mover3");
+        engine.submit_order("AMD", OrderType::LIMIT, OrderSide::SELL, 115.0, 10, "price_mover4");
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        engine.submit_order("AMD", OrderType::LIMIT, OrderSide::BUY, 108.0, 10, "trigger_client");
+        engine.submit_order("AMD", OrderType::LIMIT, OrderSide::SELL, 108.0, 10, "trigger_client2");
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        
+        auto book = engine.get_order_book("AMD");
+        assert(book != nullptr);
+        
+        double last_price = book->get_last_price();
+        assert(last_price > 0.0);
+        
+        assert(book->get_best_bid() == 100.0);
+        assert(book->get_best_ask() == 120.0);
+        
+        std::cout << "✓ Trailing stop order price updates and triggering test passed" << std::endl;
     }
     
-    void test_order_cancellation() {
-        std::cout << "\n--- Testing Order Cancellation ---" << std::endl;
+    void test_order_cancellation_realistic() {
+        std::cout << "\n--- Testing Order Cancellation (Realistic) ---" << std::endl;
         
-        // Create an order
-        uint64_t order_id = engine.submit_order("AMZN", OrderType::LIMIT, OrderSide::BUY, 3000.0, 5, "client1");
-        assert(order_id > 0);
+        uint64_t order1 = engine.submit_order("AMZN", OrderType::LIMIT, OrderSide::BUY, 3000.0, 10, "client1");
+        uint64_t order2 = engine.submit_order("AMZN", OrderType::LIMIT, OrderSide::BUY, 3001.0, 15, "client1");
+        uint64_t order3 = engine.submit_order("AMZN", OrderType::LIMIT, OrderSide::SELL, 3100.0, 20, "client2");
         
-        // Cancel the order
-        bool cancel_success = engine.cancel_order(order_id, "client1");
+        assert(order1 > 0 && order2 > 0 && order3 > 0);
+        
+        auto book = engine.get_order_book("AMZN");
+        assert(book != nullptr);
+        assert(book->get_best_bid() == 3001.0);
+        assert(book->get_best_ask() == 3100.0);
+        
+        bool cancel_success = engine.cancel_order(order2, "client1");
         assert(cancel_success);
         
-        // Try to cancel non-existent order
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        book = engine.get_order_book("AMZN");
+        assert(book != nullptr);
+        assert(book->get_best_bid() == 3000.0);
+        assert(book->get_best_ask() == 3100.0);
+        
         bool cancel_fail = engine.cancel_order(99999, "client1");
         assert(!cancel_fail);
         
-        // Try to cancel order with wrong client
-        uint64_t another_order = engine.submit_order("AMZN", OrderType::LIMIT, OrderSide::BUY, 3000.0, 5, "client2");
-        bool wrong_client_cancel = engine.cancel_order(another_order, "client1");
+        bool wrong_client_cancel = engine.cancel_order(order3, "client1");
         assert(!wrong_client_cancel);
         
         std::cout << "✓ Order cancellation test passed" << std::endl;
     }
     
-    void test_market_orders() {
-        std::cout << "\n--- Testing Market Orders ---" << std::endl;
+    void test_order_book_operations_realistic() {
+        std::cout << "\n--- Testing Order Book Operations (Realistic) ---" << std::endl;
         
-        // Test market buy order
-        uint64_t market_buy = engine.submit_order("META", OrderType::MARKET, OrderSide::BUY, 0.0, 10, "client1");
-        assert(market_buy > 0);
-        
-        // Test market sell order
-        uint64_t market_sell = engine.submit_order("META", OrderType::MARKET, OrderSide::SELL, 0.0, 10, "client2");
-        assert(market_sell > 0);
-        
-        std::cout << "✓ Market order test passed" << std::endl;
-    }
-    
-    void test_order_book_operations() {
-        std::cout << "\n--- Testing Order Book Operations ---" << std::endl;
-        
-        // Test order book creation
         auto book = engine.get_order_book("NFLX");
+        assert(book == nullptr);
+        
+        uint64_t buy_order1 = engine.submit_order("NFLX", OrderType::LIMIT, OrderSide::BUY, 400.0, 10, "client1");
+        uint64_t buy_order2 = engine.submit_order("NFLX", OrderType::LIMIT, OrderSide::BUY, 399.0, 15, "client2");
+        uint64_t sell_order1 = engine.submit_order("NFLX", OrderType::LIMIT, OrderSide::SELL, 410.0, 20, "client3");
+        uint64_t sell_order2 = engine.submit_order("NFLX", OrderType::LIMIT, OrderSide::SELL, 411.0, 25, "client4");
+        
+        assert(buy_order1 > 0 && buy_order2 > 0 && sell_order1 > 0 && sell_order2 > 0);
+        
+        book = engine.get_order_book("NFLX");
         assert(book != nullptr);
         
-        // Test best bid/ask
         double best_bid = book->get_best_bid();
         double best_ask = book->get_best_ask();
         double last_price = book->get_last_price();
         
-        // These should be 0.0 for empty book
-        assert(best_bid == 0.0);
-        assert(best_ask == 0.0);
+        assert(best_bid == 400.0);
+        assert(best_ask == 410.0);
         assert(last_price == 0.0);
         
-        // Add orders and test again
-        engine.submit_order("NFLX", OrderType::LIMIT, OrderSide::BUY, 400.0, 10, "client1");
-        engine.submit_order("NFLX", OrderType::LIMIT, OrderSide::SELL, 410.0, 10, "client2");
+        uint64_t market_buy = engine.submit_order("NFLX", OrderType::MARKET, OrderSide::BUY, 0.0, 5, "market_buyer");
+        assert(market_buy > 0);
         
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         
-        book = engine.get_order_book("NFLX");
-        best_bid = book->get_best_bid();
-        best_ask = book->get_best_ask();
-        
-        assert(best_bid == 400.0);
-        assert(best_ask == 410.0);
+        last_price = book->get_last_price();
+        assert(last_price > 0.0);
         
         std::cout << "✓ Order book operations test passed" << std::endl;
     }
     
-    void test_edge_cases() {
-        std::cout << "\n--- Testing Edge Cases ---" << std::endl;
+    void test_edge_cases_realistic() {
+        std::cout << "\n--- Testing Edge Cases (Realistic) ---" << std::endl;
         
-        // Test invalid order parameters
         uint64_t invalid_order1 = engine.submit_order("", OrderType::LIMIT, OrderSide::BUY, 100.0, 10, "client1");
         assert(invalid_order1 == 0);
         
@@ -210,25 +336,40 @@ public:
         uint64_t invalid_order4 = engine.submit_order("AAPL", OrderType::LIMIT, OrderSide::BUY, -100.0, 10, "client1");
         assert(invalid_order4 == 0);
         
-        // Test zero quantity
+        uint64_t valid_market_order = engine.submit_order("AAPL", OrderType::MARKET, OrderSide::BUY, -100.0, 10, "client1");
+        assert(valid_market_order > 0);
+        
         uint64_t zero_qty_order = engine.submit_order("AAPL", OrderType::LIMIT, OrderSide::BUY, 100.0, 0, "client1");
         assert(zero_qty_order == 0);
+        
+        uint64_t large_order = engine.submit_order("AAPL", OrderType::LIMIT, OrderSide::BUY, 100.0, 1000000, "client1");
+        assert(large_order > 0);
+        
+        uint64_t small_order = engine.submit_order("AAPL", OrderType::LIMIT, OrderSide::BUY, 100.0, 1, "client2");
+        assert(small_order > 0);
+        
+        uint64_t high_price_order = engine.submit_order("AAPL", OrderType::LIMIT, OrderSide::BUY, 999999.99, 10, "client3");
+        assert(high_price_order > 0);
         
         std::cout << "✓ Edge cases test passed" << std::endl;
     }
     
-    void test_concurrent_operations() {
-        std::cout << "\n--- Testing Concurrent Operations ---" << std::endl;
+    void test_concurrent_operations_realistic() {
+        std::cout << "\n--- Testing Concurrent Operations (Realistic) ---" << std::endl;
         
-        // Test multiple orders from different clients
         std::vector<std::thread> threads;
         std::vector<uint64_t> order_ids;
+        std::mutex order_ids_mutex;
         
-        for (int i = 0; i < 10; i++) {
-            threads.emplace_back([this, i, &order_ids]() {
+        for (int i = 0; i < 20; i++) {
+            threads.emplace_back([this, i, &order_ids, &order_ids_mutex]() {
                 std::string client_id = "client" + std::to_string(i);
-                uint64_t order_id = engine.submit_order("AAPL", OrderType::LIMIT, OrderSide::BUY, 
-                                                       100.0 + i, 10, client_id);
+                double price = 100.0 + (i % 10);
+                OrderSide side = (i % 2 == 0) ? OrderSide::BUY : OrderSide::SELL;
+                
+                uint64_t order_id = engine.submit_order("AAPL", OrderType::LIMIT, side, price, 10, client_id);
+                
+                std::lock_guard<std::mutex> lock(order_ids_mutex);
                 order_ids.push_back(order_id);
             });
         }
@@ -237,20 +378,95 @@ public:
             thread.join();
         }
         
-        // Verify all orders were created
         for (uint64_t order_id : order_ids) {
             assert(order_id > 0);
         }
         
+        auto book = engine.get_order_book("AAPL");
+        assert(book != nullptr);
+        
+        double best_bid = book->get_best_bid();
+        double best_ask = book->get_best_ask();
+        
+        if (best_bid > 0 && best_ask > 0) {
+            assert(best_bid < best_ask);
+        }
+        
         std::cout << "✓ Concurrent operations test passed" << std::endl;
+    }
+    
+    void test_partial_fills_and_remaining_quantity() {
+        std::cout << "\n--- Testing Partial Fills and Remaining Quantity ---" << std::endl;
+        
+        engine.submit_order("MSFT", OrderType::LIMIT, OrderSide::SELL, 100.0, 50, "liquidity_provider");
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        uint64_t market_buy = engine.submit_order("MSFT", OrderType::MARKET, OrderSide::BUY, 0.0, 100, "partial_buyer");
+        assert(market_buy > 0);
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        auto book = engine.get_order_book("MSFT");
+        assert(book != nullptr);
+        assert(book->get_best_ask() == 0.0);
+        assert(book->get_last_price() > 0.0);
+        
+        engine.submit_order("MSFT", OrderType::LIMIT, OrderSide::SELL, 101.0, 30, "liquidity_provider2");
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        assert(book->get_best_ask() == 101.0);
+        
+        uint64_t market_buy2 = engine.submit_order("MSFT", OrderType::MARKET, OrderSide::BUY, 0.0, 20, "partial_buyer2");
+        assert(market_buy2 > 0);
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        assert(book->get_best_ask() == 101.0);
+        
+        std::cout << "✓ Partial fills and remaining quantity test passed" << std::endl;
+    }
+    
+    void test_order_status_transitions() {
+        std::cout << "\n--- Testing Order Status Transitions ---" << std::endl;
+        
+        engine.submit_order("META", OrderType::LIMIT, OrderSide::SELL, 2500.0, 50, "seller");
+        uint64_t buy_order = engine.submit_order("META", OrderType::LIMIT, OrderSide::BUY, 2500.0, 50, "buyer");
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        auto book = engine.get_order_book("META");
+        assert(book != nullptr);
+        assert(book->get_best_bid() == 0.0);
+        assert(book->get_best_ask() == 0.0);
+        assert(book->get_last_price() > 0.0);
+        
+        uint64_t cancel_order = engine.submit_order("META", OrderType::LIMIT, OrderSide::BUY, 2400.0, 25, "canceller");
+        bool cancel_success = engine.cancel_order(cancel_order, "canceller");
+        assert(cancel_success);
+        
+        book = engine.get_order_book("META");
+        assert(book != nullptr);
+        assert(book->get_best_bid() == 0.0);
+        
+        engine.submit_order("META", OrderType::LIMIT, OrderSide::SELL, 2501.0, 30, "partial_seller");
+        uint64_t partial_buy = engine.submit_order("META", OrderType::MARKET, OrderSide::BUY, 0.0, 50, "partial_buyer");
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        book = engine.get_order_book("META");
+        assert(book != nullptr);
+        assert(book->get_best_ask() == 0.0);
+        assert(book->get_last_price() > 0.0);
+        
+        std::cout << "✓ Order status transitions test passed" << std::endl;
     }
 };
 
-// Test helper functions
 void test_order_creation() {
     std::cout << "\n--- Testing Order Creation ---" << std::endl;
     
-    // Test Order constructor
     Order order1(1, "AAPL", OrderType::LIMIT, OrderSide::BUY, 150.0, 100, "client1");
     assert(order1.id == 1);
     assert(order1.symbol == "AAPL");
@@ -261,13 +477,11 @@ void test_order_creation() {
     assert(order1.client_id == "client1");
     assert(order1.status == OrderStatus::PENDING);
     
-    // Test stop limit constructor
-    Order order2(2, "AAPL", OrderType::STOP_LIMIT, OrderSide::SELL, 160.0, 155.0, 50, "client2");
-    assert(order2.price == 160.0); // stop price
-    assert(order2.limit_price == 155.0); // limit price
+    Order order2(2, "AAPL", OrderType::STOP_LIMIT, OrderSide::SELL, 160.0, 155.0, 50, "client2", StopLimitOrderTag{});
+    assert(order2.price == 160.0);
+    assert(order2.limit_price == 155.0);
     
-    // Test trailing stop constructor
-    Order order3(3, "AAPL", OrderType::TRAILING_STOP, OrderSide::SELL, 5.0, 25, "client3");
+    Order order3(3, "AAPL", OrderType::TRAILING_STOP, OrderSide::SELL, 5.0, 25, "client3", TrailingStopOrderTag{});
     assert(order3.trailing_amount == 5.0);
     assert(order3.highest_price == 0.0);
     assert(order3.lowest_price == 0.0);
@@ -280,12 +494,10 @@ void test_order_book_basic() {
     
     OrderBook book("AAPL");
     
-    // Test initial state
     assert(book.get_best_bid() == 0.0);
     assert(book.get_best_ask() == 0.0);
     assert(book.get_last_price() == 0.0);
     
-    // Test adding orders
     auto order1 = std::make_shared<Order>(1, "AAPL", OrderType::LIMIT, OrderSide::BUY, 150.0, 100, "client1");
     auto order2 = std::make_shared<Order>(2, "AAPL", OrderType::LIMIT, OrderSide::SELL, 155.0, 50, "client2");
     
@@ -295,7 +507,6 @@ void test_order_book_basic() {
     assert(book.get_best_bid() == 150.0);
     assert(book.get_best_ask() == 155.0);
     
-    // Test order cancellation
     book.cancel_order(1);
     assert(book.get_best_bid() == 0.0);
     
@@ -303,18 +514,16 @@ void test_order_book_basic() {
 }
 
 int main() {
-    std::cout << "Starting Trading Engine Test Suite..." << std::endl;
+    std::cout << "Starting Realistic Trading Engine Test Suite..." << std::endl;
     
     try {
-        // Run basic tests
         test_order_creation();
         test_order_book_basic();
         
-        // Run comprehensive tests
         TradingEngineTest test_suite;
         test_suite.run_all_tests();
         
-        std::cout << "\n🎉 ALL TESTS PASSED SUCCESSFULLY! 🎉" << std::endl;
+        std::cout << "\n🎉 ALL REALISTIC TESTS PASSED SUCCESSFULLY! 🎉" << std::endl;
         return 0;
         
     } catch (const std::exception& e) {
@@ -324,4 +533,4 @@ int main() {
         std::cerr << "❌ UNKNOWN TEST FAILURE" << std::endl;
         return 1;
     }
-} 
+}

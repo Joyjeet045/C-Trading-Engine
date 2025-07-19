@@ -33,4 +33,5 @@ private:
     bool should_trigger_stop_loss(std::shared_ptr<Order> order) const;
     void execute_stop_loss_order(std::shared_ptr<Order> order, const std::string& trigger_context);
     void update_trailing_stop_price(std::shared_ptr<Order> order);
+    double execute_market_order_internal(std::shared_ptr<Order> market_order, OrderSide opposite_side, double max_quantity);
 };

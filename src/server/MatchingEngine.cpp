@@ -59,7 +59,7 @@ uint64_t MatchingEngine::submit_stop_limit_order(const std::string& symbol, Orde
         order_books[symbol] = std::make_shared<OrderBook>(symbol);
     }
     
-    auto order = std::make_shared<Order>(order_id, symbol, OrderType::STOP_LIMIT, side, stop_price, limit_price, quantity, client_id);
+    auto order = std::make_shared<Order>(order_id, symbol, OrderType::STOP_LIMIT, side, stop_price, limit_price, quantity, client_id, StopLimitOrderTag{});
     client_orders[client_id].push_back(order_id);
     
     auto book = order_books[symbol];
@@ -85,7 +85,7 @@ uint64_t MatchingEngine::submit_trailing_stop_order(const std::string& symbol, O
         order_books[symbol] = std::make_shared<OrderBook>(symbol);
     }
     
-    auto order = std::make_shared<Order>(order_id, symbol, OrderType::TRAILING_STOP, side, trailing_amount, quantity, client_id);
+    auto order = std::make_shared<Order>(order_id, symbol, OrderType::TRAILING_STOP, side, trailing_amount, quantity, client_id, TrailingStopOrderTag{});
     client_orders[client_id].push_back(order_id);
     
     auto book = order_books[symbol];
@@ -152,11 +152,8 @@ bool MatchingEngine::validate_stop_limit_order(const std::string& symbol, OrderS
     if (symbol.empty() || client_id.empty()) return false;
     if (quantity <= 0) return false;
     if (stop_price <= 0 || limit_price <= 0) return false;
-    
-    // For SELL stop limit: stop_price should be <= limit_price (trigger when price falls)
-    // For BUY stop limit: stop_price should be >= limit_price (trigger when price rises)
-    if (side == OrderSide::SELL && stop_price > limit_price) return false;
-    if (side == OrderSide::BUY && stop_price < limit_price) return false;
+    if (side == OrderSide::SELL && stop_price < limit_price) return false;
+    if (side == OrderSide::BUY && stop_price > limit_price) return false;
     
     return true;
 }
